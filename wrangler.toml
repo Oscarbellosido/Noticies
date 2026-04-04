@@ -1,0 +1,10 @@
+name = "noticies"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "ARTICLES"
+id = "4ebfd4a5db474ab9b7cb42bf3cb9f5e7"
+
+[triggers]
+crons = ["0 4,12,18 * * *"]

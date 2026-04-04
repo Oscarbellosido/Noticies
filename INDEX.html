@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🌍 Noticies en Català</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { darkMode: 'class', theme: { extend: {} } };
+</script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; }
+  .card  { animation: fadeUp .25s ease; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; } }
+  .spin  { animation: spin 1s linear infinite; }
+  @keyframes spin  { to { transform: rotate(360deg); } }
+  .badge { font-size:.65rem; font-weight:700; letter-spacing:.05em; padding:2px 8px; border-radius:999px; }
+  .bar   { height:3px; border-radius:2px; background: linear-gradient(90deg,#3b82f6,#8b5cf6); }
+  #toast { transition: opacity .3s, transform .3s; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 99px; }
+  #map { height: 420px; border-radius: 1rem; z-index: 0; }
+  .leaflet-popup-content { font-family: system-ui, sans-serif; min-width: 200px; }
+  .map-legend span { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:middle; }
+  .badge-nova { font-size:.6rem; font-weight:700; background:#16a34a; color:#fff; padding:2px 7px; border-radius:999px; letter-spacing:.04em; white-space:nowrap; }
+</style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
+
+<!-- ══ BANNER ERROR ════════════════════════════════════════════════════════ -->
+<div id="banner-error" class="hidden bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+  <span class="text-base">⚠️</span>
+  <span id="banner-msg">No es pot connectar a api.php</span>
+</div>
+
+<!-- ══ BANNER NOVES NOTÍCIES ═══════════════════════════════════════════════ -->
+<div id="banner-nova" class="hidden bg-blue-50 dark:bg-blue-900/30 border-b border-blue-200 dark:border-blue-700 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
+  <span class="text-base">🔄</span>
+  <span id="banner-nova-msg"></span>
+  <span>—</span>
+  <button onclick="applyNewArticles()" class="font-bold underline hover:no-underline">Actualitzar</button>
+  <button onclick="hideBannerNova()" class="ml-auto text-blue-400 hover:text-blue-600 text-base leading-none">✕</button>
+</div>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
+  <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-2 flex-wrap">
+
+    <div class="flex items-center gap-2 mr-2 flex-shrink-0">
+      <span class="text-2xl leading-none">🌍</span>
+      <div class="leading-tight">
+        <div class="font-bold text-blue-600 dark:text-blue-400 text-base leading-none">Noticies</div>
+        <div class="text-[10px] text-gray-400">en català · IA</div>
+      </div>
+    </div>
+
+    <div class="relative flex-1 min-w-[140px] max-w-xs">
+      <input id="inp-search" type="search" placeholder="Cercar..."
+        class="w-full pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700
+               bg-gray-100 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        oninput="debounceSearch(this.value)"/>
+      <svg class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+      </svg>
+    </div>
+
+    <select id="sel-country" onchange="S.country=this.value; if(S.view==='all') refreshAll()"
+      class="py-1.5 px-2 rounded-lg border border-gray-200 dark:border-gray-700
+             bg-gray-100 dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <option value="">Tots els països</option>
+      <option value="UK">Regne Unit 🇬🇧</option>
+      <option value="US">EUA 🇺🇸</option>
+      <option value="FR">França 🇫🇷</option>
+      <option value="DE">Alemanya 🇩🇪</option>
+      <option value="EU">Unió Europea 🇪🇺</option>
+      <option value="ES">Espanya 🇪🇸</option>
+    </select>
+
+    <div class="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 ml-auto">
+      <button onclick="setView('top')"          id="btn-top"          class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">⭐ Top</button>
+      <button onclick="setView('all')"          id="btn-all"          class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">📰 Totes</button>
+      <button onclick="setView('briefing')"     id="btn-briefing"     class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">📋 Briefing</button>
+      <button onclick="setView('favs')"         id="btn-favs"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">❤️ Favs</button>
+      <button onclick="setView('perspectives')" id="btn-perspectives" class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">🌍 Perspectives</button>
+      <button onclick="setView('chat')"         id="btn-chat"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">💬 Chat</button>
+      <button onclick="setView('mapa')"         id="btn-mapa"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">🗺️ Mapa</button>
+    </div>
+
+    <button onclick="triggerFetch()" id="btn-fetch"
+      class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700
+             text-white text-xs font-bold rounded-lg transition-colors">
+      <svg id="ico-fetch" class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581
+                 m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      <span>Actualitzar</span>
+    </button>
+
+    <button onclick="clearCache()" title="Netejar caché" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">🗑️</button>
+
+    <button onclick="toggleDark()" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">
+      <span id="ico-dark">🌙</span>
+    </button>
+  </div>
+
+  <!-- Categories -->
+  <div id="cat-wrap" class="max-w-6xl mx-auto px-4 pb-2">
+    <div class="flex gap-1.5 overflow-x-auto pb-0.5">
+      <button onclick="setCategory('')"              id="cat-all"           class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">Totes</button>
+      <button onclick="setCategory('Política')"      id="cat-Política"      class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">🏛️ Política</button>
+      <button onclick="setCategory('Economia')"      id="cat-Economia"      class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">📈 Economia</button>
+      <button onclick="setCategory('Tecnologia')"    id="cat-Tecnologia"    class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">💻 Tecnologia</button>
+      <button onclick="setCategory('Internacional')" id="cat-Internacional" class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">🌍 Internacional</button>
+      <button onclick="setCategory('Societat')"      id="cat-Societat"      class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">👥 Societat</button>
+      <button onclick="setCategory('Conflicte')"     id="cat-Conflicte"     class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">⚔️ Conflicte</button>
+    </div>
+  </div>
+</header>
+
+<!-- ══ MAIN ════════════════════════════════════════════════════════════════ -->
+<main class="max-w-6xl mx-auto px-4 py-5">
+
+  <div class="flex items-center justify-between mb-4 text-sm text-gray-500 dark:text-gray-400 min-h-[1.5rem]">
+    <span id="txt-status"></span>
+    <span id="txt-stats" class="flex gap-3 text-xs"></span>
+  </div>
+
+  <div id="loading" class="hidden flex-col items-center justify-center py-24 gap-3 text-gray-400">
+    <svg class="spin w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+               m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    <span id="loading-msg" class="text-sm">Carregant notícies...</span>
+  </div>
+
+  <div id="empty" class="hidden flex-col items-center justify-center py-20 gap-3 text-gray-400">
+    <span id="empty-icon" class="text-5xl">📭</span>
+    <p id="empty-title" class="font-semibold text-gray-500 dark:text-gray-400">Cap notícia trobada</p>
+    <p id="empty-hint"  class="text-sm text-center max-w-sm"></p>
+  </div>
+
+  <div id="view-top" class="hidden">
+    <h2 class="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">⭐ Top 10 Notícies del Dia</h2>
+    <div id="list-top" class="flex flex-col gap-3"></div>
+  </div>
+
+  <div id="view-all" class="hidden">
+    <div id="list-all" class="flex flex-col gap-3"></div>
+    <div class="flex justify-center mt-6">
+      <button id="btn-more" onclick="loadMore()"
+        class="hidden px-5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+               text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800">
+        Carregar més ↓
+      </button>
+    </div>
+  </div>
+
+  <div id="view-briefing" class="hidden">
+    <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 max-w-3xl mx-auto shadow-sm">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-lg font-bold">📋 Briefing Diari</h2>
+        <span id="briefing-date" class="text-xs text-gray-400"></span>
+      </div>
+      <p class="text-sm text-gray-400 mb-4">Les notícies més rellevants · lectura <strong>~2 min</strong></p>
+
+      <!-- Resum narratiu -->
+      <div class="mb-6">
+        <div class="flex flex-wrap gap-2 mb-3">
+          <button onclick="generarResum()" id="btn-resum"
+            class="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700
+                   text-white text-sm font-bold rounded-lg transition-colors">
+            <span id="ico-resum">✨</span>
+            <span>Generar resum del dia</span>
+          </button>
+          <button onclick="toggleAudio()" id="btn-audio"
+            class="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700
+                   text-white text-sm font-bold rounded-lg transition-colors">
+            🔊 Escolta el briefing
+          </button>
+        </div>
+        <div id="resum-box" class="hidden mt-4 p-4 bg-violet-50 dark:bg-violet-900/20
+             border border-violet-200 dark:border-violet-800 rounded-xl">
+          <p id="resum-text" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line"></p>
+        </div>
+      </div>
+
+      <div id="list-briefing" class="flex flex-col gap-5"></div>
+    </div>
+  </div>
+
+  <div id="view-favs" class="hidden">
+    <h2 class="text-lg font-bold mb-4">❤️ Notícies Favorites</h2>
+    <div id="list-favs" class="flex flex-col gap-3"></div>
+  </div>
+
+  <div id="view-mapa" class="hidden">
+    <div class="max-w-5xl mx-auto">
+      <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 class="font-bold text-base">🗺️ Mapa de l'Actualitat</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Països protagonistes de les notícies d'avui</p>
+          </div>
+            <div class="flex flex-wrap gap-2 text-xs">
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span><span class="text-gray-600 dark:text-gray-300">Conflicte</span></span>
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6"></span><span class="text-gray-600 dark:text-gray-300">Política</span></span>
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e"></span><span class="text-gray-600 dark:text-gray-300">Economia</span></span>
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7"></span><span class="text-gray-600 dark:text-gray-300">Tecnologia</span></span>
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ec4899"></span><span class="text-gray-600 dark:text-gray-300">Societat</span></span>
+            <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f97316"></span><span class="text-gray-600 dark:text-gray-300">Internacional</span></span>
+          </div>
+        </div>
+        <div id="map" class="mx-2 my-2"></div>
+        <div id="mapa-noticies" class="p-4 hidden">
+          <h3 id="mapa-pais-nom" class="font-bold text-sm mb-3"></h3>
+          <div id="mapa-llista" class="flex flex-col gap-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-perspectives" class="hidden">
+    <div class="mb-4">
+      <h2 class="text-lg font-bold text-gray-800 dark:text-gray-100">🌍 Perspectives</h2>
+      <p class="text-sm text-gray-400 mt-0.5">El mateix tema vist des de diferents fonts i països</p>
+    </div>
+    <div id="list-perspectives" class="flex flex-col gap-8"></div>
+  </div>
+
+  <div id="view-chat" class="hidden">
+    <div class="max-w-3xl mx-auto">
+      <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-gray-100 dark:border-gray-800">
+          <h2 class="font-bold text-base">💬 Pregunta sobre l'actualitat</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Claude respon basant-se en les notícies d'avui</p>
+        </div>
+
+        <!-- Missatges -->
+        <div id="chat-msgs" class="flex flex-col gap-4 p-4 min-h-[300px] max-h-[50vh] overflow-y-auto">
+          <div class="text-sm text-gray-400 text-center py-8">
+            Fes una pregunta sobre les notícies d'avui.<br>
+            <span class="text-xs">Ex: "Què passa amb Trump i l'Iran?" · "Quines notícies d'economia hi ha?"</span>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex gap-2">
+          <input id="chat-input" type="text" placeholder="Pregunta sobre les notícies..."
+            class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700
+                   bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarChat(); }"/>
+          <button onclick="enviarChat()" id="btn-chat-send"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-1.5">
+            <span id="ico-chat-send">➤</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══ TOAST ════════════════════════════════════════════════════════════════ -->
+<div id="toast" style="opacity:0;transform:translateX(-50%) translateY(10px)"
+  class="fixed bottom-6 left-1/2 pointer-events-none z-50
+         bg-gray-900 dark:bg-white text-white dark:text-gray-900
+         text-sm px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
+  <span id="toast-msg"></span>
+</div>
+
+<!-- ══ MODAL ════════════════════════════════════════════════════════════════ -->
+<div id="modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+     onclick="closeModal(event)">
+  <div class="bg-white dark:bg-gray-900 rounded-2xl max-w-2xl w-full max-h-[85vh]
+              overflow-y-auto shadow-2xl" onclick="event.stopPropagation()">
+    <div class="p-6">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <h2 id="modal-title" class="text-xl font-bold leading-snug flex-1"></h2>
+        <button onclick="closeModal()"
+          class="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100
+                 dark:hover:bg-gray-800 flex-shrink-0 text-lg leading-none">✕</button>
+      </div>
+      <div id="modal-meta" class="flex flex-wrap gap-2 mb-4"></div>
+      <p id="modal-body" class="text-gray-700 dark:text-gray-300 leading-relaxed mb-5 whitespace-pre-line text-[15px]"></p>
+      <div class="flex gap-3 flex-wrap">
+        <a id="modal-link" href="#" target="_blank" rel="noopener"
+          class="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700
+                 text-white text-sm font-semibold rounded-lg transition-colors">
+          Llegir article original ↗
+        </a>
+        <button id="modal-fav-btn" onclick="favFromModal()"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-semibold
+                 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          ❤️ Desar com a favorit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ CONFIG ════════════════════════════════════════════════════════════════
+const WORKER_URL = 'https://noticies.oscarbellosido.workers.dev';
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function apiGet(params = {}) {
+  const url = new URL(WORKER_URL);
+  Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && url.searchParams.set(k, v));
+  const r = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`Error ${r.status}`);
+  return r.json();
+}
+
+async function apiPost(params = {}, body = {}) {
+  const url = new URL(WORKER_URL);
+  Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && url.searchParams.set(k, v));
+  const r = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!r.ok) throw new Error(`Error ${r.status}`);
+  return r.json();
+}
+
+const CAT_COL = {
+  'Política':     'bg-blue-100   text-blue-800   dark:bg-blue-900/40   dark:text-blue-300',
+  'Economia':     'bg-green-100  text-green-800  dark:bg-green-900/40  dark:text-green-300',
+  'Tecnologia':   'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  'Internacional':'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  'Societat':     'bg-pink-100   text-pink-800   dark:bg-pink-900/40   dark:text-pink-300',
+  'Conflicte':    'bg-red-100    text-red-800    dark:bg-red-900/40    dark:text-red-300',
+};
+const CAT_ICO = { Política:'🏛️', Economia:'📈', Tecnologia:'💻', Internacional:'🌍', Societat:'👥', Conflicte:'⚔️' };
+const FLAGS   = { UK:'🇬🇧', US:'🇺🇸', FR:'🇫🇷', DE:'🇩🇪', EU:'🇪🇺', ES:'🇪🇸', QA:'🇶🇦', ME:'🌍', HK:'🇭🇰', CA:'🏴󠁥󠁳󠁣󠁴󠁿' };
+
+const S = {
+  view:'top', category:'', country:'', search:'', offset:0, limit:20,
+  articles:[], topArts:[], favArts:[], perspArts:[], dark:false, modalId:null, isFetching:false,
+};
+
+// ══ INIT ══════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  S.dark = localStorage.getItem('dark') === '1';
+  applyDark();
+  updateCatButtons('');
+  updateViewButtons('top');
+  showView('top');
+  showLoad(true);
+  loadTop();
+  loadStats();
+});
+
+// ══ NETEJAR CACHÉ ══════════════════════════════════════════════════════════
+function clearCache() {
+  if (!confirm('Vols tornar a descarregar les notícies?')) return;
+  S.articles = []; S.topArts = []; S.favArts = [];
+  toast('🗑️ Actualitzant...');
+  setTimeout(() => triggerFetch(), 500);
+}
+
+// ══ VISTES ════════════════════════════════════════════════════════════════
+function showView(v) {
+  ['top','all','briefing','favs','perspectives','chat','mapa'].forEach(x =>
+    document.getElementById(`view-${x}`).classList.add('hidden')
+  );
+  document.getElementById(`view-${v}`).classList.remove('hidden');
+  document.getElementById('cat-wrap').style.display =
+    (v === 'briefing' || v === 'favs' || v === 'perspectives' || v === 'chat' || v === 'mapa') ? 'none' : '';
+}
+
+async function setView(v) {
+  stopAudio();
+  S.view = v; S.offset = 0; S.articles = [];
+  showView(v); updateViewButtons(v);
+  hideEmpty(); showLoad(true);
+  if      (v === 'top')          loadTop();
+  else if (v === 'all')          loadAll();
+  else if (v === 'briefing')     loadBriefing();
+  else if (v === 'favs')         loadFavs();
+  else if (v === 'perspectives') loadPerspectives();
+  else if (v === 'chat')         { showLoad(false); setTimeout(() => document.getElementById('chat-input').focus(), 100); }
+  else if (v === 'mapa')         { showLoad(false); setTimeout(() => initMapa(), 100); }
+}
+
+function updateViewButtons(active) {
+  document.querySelectorAll('.vbtn').forEach(b => {
+    b.classList.remove('bg-white','dark:bg-gray-700','shadow','text-blue-600','dark:text-blue-400');
+    b.classList.add('text-gray-600','dark:text-gray-300');
+  });
+  const ab = document.getElementById('btn-' + active);
+  if (ab) {
+    ab.classList.add('bg-white','dark:bg-gray-700','shadow','text-blue-600','dark:text-blue-400');
+    ab.classList.remove('text-gray-600','dark:text-gray-300');
+  }
+}
+
+// ══ CÀRREGA DES DEL WORKER ════════════════════════════════════════════════
+async function loadTop() {
+  try {
+    const data = await apiGet({ action: 'top', limit: 10 });
+    S.topArts = data.articles || [];
+    render('list-top', S.topArts);
+    if (!S.topArts.length) showEmpty('📭', 'Cap notícia disponible',
+      'Fes clic a "Actualitzar" per obtenir les primeres notícies.');
+  } catch(e) {
+    showBanner('No es pot connectar al servidor');
+    showEmpty('⚠️', 'Error de connexió', e.message);
+  }
+  showLoad(false);
+}
+
+async function loadAll(append = false) {
+  try {
+    const data = await apiGet({
+      action:   'news',
+      category: S.category,
+      country:  S.country,
+      search:   S.search,
+      limit:    S.limit,
+      offset:   S.offset,
+    });
+    const page = data.articles || [];
+    S.articles = append ? [...S.articles, ...page] : page;
+    render('list-all', S.articles);
+    document.getElementById('btn-more').classList.toggle('hidden', (data.total || 0) <= S.offset + S.limit);
+    if (!S.articles.length) showEmpty('📭', 'Cap notícia trobada', 'Prova uns altres filtres o actualitza.');
+  } catch(e) {
+    showBanner('No es pot connectar al servidor');
+  }
+  showLoad(false);
+}
+
+async function loadBriefing() {
+  try {
+    const data = await apiGet({ action: 'top', limit: 15 });
+    const arts = data.articles || [];
+    document.getElementById('briefing-date').textContent =
+      new Date().toLocaleDateString('ca', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    renderBriefing(arts);
+    if (!arts.length) showEmpty('📋', 'Briefing buit', 'Actualitza primer per veure les notícies.');
+  } catch(e) {
+    showBanner('No es pot connectar al servidor');
+  }
+  showLoad(false);
+}
+
+async function loadFavs() {
+  try {
+    const data = await apiGet({ action: 'favorites' });
+    S.favArts = data.articles || [];
+    render('list-favs', S.favArts);
+    if (!S.favArts.length) showEmpty('❤️', 'Cap favorit guardat',
+      'Fes clic al 🤍 en qualsevol notícia per guardar-la aquí.');
+  } catch(e) {
+    showBanner('No es pot connectar al servidor');
+  }
+  showLoad(false);
+}
+
+async function loadPerspectives() {
+  try {
+    const data = await apiGet({ action: 'perspectives' });
+    const groups = data.groups || [];
+    S.perspArts = groups.flatMap(g => g.articles);
+    renderPerspectives(groups);
+    if (!groups.length) showEmpty('🌍', 'Perspectives no disponibles encara',
+      'Les notícies actuals no tenen identificador de tema (topic_id). Fes clic a "Actualitzar" per reprocessar-les i generar les perspectives.');
+  } catch(e) {
+    showBanner('No es pot connectar al servidor');
+    showEmpty('⚠️', 'Error de connexió', e.message);
+  }
+  showLoad(false);
+}
+
+function humanizeTopic(id) {
+  return (id || '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function renderPerspectives(groups) {
+  const el = document.getElementById('list-perspectives');
+  if (!groups.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = groups.map(g => {
+    const label = humanizeTopic(g.topic_id);
+    const cards = g.articles.map(a => {
+      const fl  = FLAGS[a.country] || '🌐';
+      const cc  = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
+      const ci  = CAT_ICO[a.category] || '📰';
+      const sum = a.summary_ca ? a.summary_ca.slice(0, 160) + (a.summary_ca.length > 160 ? '…' : '') : '';
+      return `
+      <div class="flex-shrink-0 w-72 bg-white dark:bg-gray-900 rounded-xl border border-gray-200
+                  dark:border-gray-800 p-4 cursor-pointer hover:shadow-md hover:border-blue-200
+                  dark:hover:border-blue-900 transition-shadow flex flex-col gap-2"
+           onclick="openModal('${esc(a.id)}')">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl leading-none">${fl}</span>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">${esc(a.source)}</div>
+            <span class="badge ${cc} mt-0.5 inline-block">${ci} ${esc(a.category)}</span>
+          </div>
+        </div>
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug line-clamp-3">${esc(a.title_ca || a.title)}</h4>
+        ${sum ? `<p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-3">${esc(sum)}</p>` : ''}
+      </div>`;
+    }).join('');
+
+    const srcCount = new Set(g.articles.map(a => a.source)).size;
+    return `
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <h3 class="font-bold text-gray-800 dark:text-gray-100">${esc(label)}</h3>
+        <span class="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300
+                     px-2 py-0.5 rounded-full font-semibold">${srcCount} fonts</span>
+      </div>
+      <div class="flex gap-3 overflow-x-auto pb-2">${cards}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadStats() {
+  try {
+    const data = await apiGet({ action: 'stats' });
+    document.getElementById('txt-status').textContent = `${data.total_articles || 0} notícies processades`;
+    const cats = data.by_category || {};
+    document.getElementById('txt-stats').innerHTML = Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5)
+      .map(([k,v]) => `<span class="flex items-center gap-0.5">${CAT_ICO[k]||'📰'} <span>${v}</span></span>`).join('');
+  } catch {}
+}
+
+async function loadMore() {
+  S.offset += S.limit;
+  showLoad(true);
+  await loadAll(true);
+}
+
+async function refreshAll() {
+  S.offset = 0; S.articles = [];
+  showLoad(true); hideEmpty();
+  await loadAll();
+}
+
+// ══ FILTRES ═══════════════════════════════════════════════════════════════
+function setCategory(cat) {
+  S.category = cat;
+  updateCatButtons(cat);
+  if (S.view === 'all') { S.offset = 0; showLoad(true); hideEmpty(); loadAll(); }
+  else setView('all');
+}
+
+function updateCatButtons(active) {
+  document.querySelectorAll('.catbtn').forEach(b => {
+    b.className = b.className.replace(/bg-blue-600|text-white/g,'').replace('active','');
+    b.classList.add('bg-white','dark:bg-gray-800','text-gray-600','dark:text-gray-300',
+                    'border-gray-200','dark:border-gray-700','hover:bg-gray-100','dark:hover:bg-gray-700');
+  });
+  const ab = document.getElementById(active ? `cat-${active}` : 'cat-all');
+  if (ab) {
+    ab.classList.remove('bg-white','dark:bg-gray-800','text-gray-600','dark:text-gray-300',
+                        'hover:bg-gray-100','dark:hover:bg-gray-700');
+    ab.classList.add('bg-blue-600','text-white','border-blue-600');
+  }
+}
+
+let searchTimer;
+function debounceSearch(v) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    S.search = v.trim();
+    if (S.view === 'all') { S.offset = 0; showLoad(true); hideEmpty(); loadAll(); }
+    else if (v.trim()) setView('all');
+  }, 400);
+}
+
+// ══ ACTUALITZAR ═══════════════════════════════════════════════════════════
+function stopFetchUI() {
+  S.isFetching = false;
+  const btn = document.getElementById('btn-fetch');
+  btn.disabled = false;
+  document.getElementById('ico-fetch').classList.remove('spin');
+}
+
+async function triggerFetch() {
+  if (S.isFetching) { toast('⏳ Ja s\'estan obtenint notícies...'); return; }
+  S.isFetching = true;
+  const btn = document.getElementById('btn-fetch');
+  btn.disabled = true;
+  document.getElementById('ico-fetch').classList.add('spin');
+  toast('🔄 Obtenint notícies al servidor...');
+
+  let poll = null;
+
+  // Timeout dur: 2 minuts i mig
+  const hardTimeout = setTimeout(() => {
+    if (!S.isFetching) return;
+    clearInterval(poll);
+    stopFetchUI();
+    toast('⏳ L\'actualització pot trigar uns minuts, les notícies s\'actualitzaran aviat.');
+    loadTop(); loadStats();
+  }, 150000);
+
+  try {
+    const res = await apiGet({ action: 'fetch' });
+    if (res.status === 'already_running') {
+      toast('⏳ Ja s\'estan processant notícies, espera...');
+    } else {
+      toast('⚙️ Processant notícies al servidor... (~2 min)');
+    }
+
+    // Polling fins que acabi (màxim 24 × 5s = 120s, cobert pel hardTimeout)
+    let attempts = 0;
+    poll = setInterval(async () => {
+      attempts++;
+      try {
+        const stats = await apiGet({ action: 'stats' });
+        if (!stats.is_fetching || attempts >= 24) {
+          clearInterval(poll);
+          clearTimeout(hardTimeout);
+          hideBanner();
+          toast(`✅ ${stats.total_articles} notícies disponibles!`);
+          stopFetchUI();
+          loadTop(); loadStats();
+        }
+      } catch {
+        clearInterval(poll);
+        clearTimeout(hardTimeout);
+        stopFetchUI();
+      }
+    }, 5000);
+
+  } catch(e) {
+    clearTimeout(hardTimeout);
+    console.error('triggerFetch error:', e);
+    showBanner(e.message);
+    toast('⚠️ ' + e.message);
+    stopFetchUI();
+  }
+}
+
+// ══ FAVORITS ══════════════════════════════════════════════════════════════
+function allArts() { return [...S.articles, ...S.topArts, ...S.favArts, ...S.perspArts]; }
+
+async function quickFav(id, btn) {
+  try {
+    const data = await apiPost({ action: 'favorite' }, { id });
+    const isFav = data.is_favorite;
+    allArts().forEach(a => { if (a.id === id) a.is_favorite = isFav; });
+    if (btn) btn.textContent = isFav ? '❤️' : '🤍';
+    toast(isFav ? '❤️ Afegit a favorites' : 'Eliminat de favorites');
+    if (S.view === 'favs') { showLoad(true); loadFavs(); }
+  } catch(e) { toast('Error en desar el favorit'); }
+}
+
+// ══ MODAL ═════════════════════════════════════════════════════════════════
+function openModal(id) {
+  S.modalId = id;
+  const a = allArts().find(x => x.id === id);
+  if (!a) return;
+  const cc = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
+  const ci = CAT_ICO[a.category] || '📰';
+  const fl = FLAGS[a.country]    || '🌐';
+  const dt = a.published_at
+    ? new Date(a.published_at).toLocaleDateString('ca',{day:'numeric',month:'long',year:'numeric'}) : '';
+  document.getElementById('modal-title').textContent = a.title_ca || a.title;
+  document.getElementById('modal-meta').innerHTML = `
+    <span class="badge ${cc}">${ci} ${esc(a.category)}</span>
+    <span class="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">${fl} ${esc(a.source)}</span>
+    ${dt ? `<span class="text-xs text-gray-400">${dt}</span>` : ''}
+    <span class="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 px-2 py-0.5 rounded-full">Rellevància ${a.relevance}/10</span>`;
+  document.getElementById('modal-body').textContent  = a.summary_ca || 'Resum no disponible.';
+  document.getElementById('modal-link').href         = a.url;
+  document.getElementById('modal-fav-btn').textContent =
+    a.is_favorite ? '💔 Eliminar de favorites' : '❤️ Desar com a favorit';
+  document.getElementById('modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal')) {
+    document.getElementById('modal').classList.add('hidden');
+    document.body.style.overflow = '';
+    S.modalId = null;
+    stopAudio();
+  }
+}
+
+async function favFromModal() {
+  if (!S.modalId) return;
+  await quickFav(S.modalId, null);
+  const a = allArts().find(x => x.id === S.modalId);
+  if (a) document.getElementById('modal-fav-btn').textContent =
+    a.is_favorite ? '💔 Eliminar de favorites' : '❤️ Desar com a favorit';
+}
+
+// ══ RENDER ════════════════════════════════════════════════════════════════
+function render(id, arts) {
+  document.getElementById(id).innerHTML = arts.map(card).join('');
+}
+
+function card(a) {
+  const cc    = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
+  const ci    = CAT_ICO[a.category] || '📰';
+  const fl    = FLAGS[a.country]    || '🌐';
+  const pct   = (a.relevance||5) / 10 * 100;
+  const fav   = a.is_favorite ? '❤️' : '🤍';
+  const dt    = a.published_at ? timeAgo(a.published_at) : '';
+  const isNova = a.published_at && (Date.now() - new Date(a.published_at)) < 2 * 3600000;
+  return `
+  <div class="card bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800
+              hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900
+              cursor-pointer group transition-shadow" onclick="openModal('${esc(a.id)}')">
+    <div class="p-4">
+      <div class="flex items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+            <span class="badge ${cc}">${ci} ${esc(a.category)}</span>
+            ${isNova ? '<span class="badge-nova">🆕 Nova</span>' : ''}
+            <span class="text-xs text-gray-400">${fl} ${esc(a.source)}</span>
+            ${dt ? `<span class="text-xs text-gray-400">· ${dt}</span>` : ''}
+          </div>
+          <h3 class="font-semibold text-gray-900 dark:text-gray-100 leading-snug
+                     group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+            ${esc(a.title_ca||a.title)}
+          </h3>
+          <div class="flex items-center gap-2 mt-2.5">
+            <div class="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-[3px]">
+              <div class="bar" style="width:${pct}%"></div>
+            </div>
+            <span class="text-xs text-gray-400 flex-shrink-0">Rel. ${a.relevance}/10</span>
+          </div>
+        </div>
+        <button onclick="event.stopPropagation(); quickFav('${esc(a.id)}', this)"
+          class="text-xl flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800
+                 hover:scale-110 transition-transform leading-none">${fav}</button>
+      </div>
+      ${a.summary_ca ? `<p class="mt-2.5 text-sm text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">${esc(a.summary_ca)}</p>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderBriefing(arts) {
+  const el = document.getElementById('list-briefing');
+  if (!arts.length) { el.innerHTML = ''; return; }
+  el.innerHTML = arts.map((a,i) => {
+    const cc = CAT_COL[a.category]||'bg-gray-100 text-gray-600';
+    const ci = CAT_ICO[a.category]||'📰';
+    const fl = FLAGS[a.country]||'🌐';
+    return `
+    <div class="${i<arts.length-1?'pb-5 border-b border-gray-100 dark:border-gray-800':''} flex gap-4">
+      <div class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400
+                  flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">${i+1}</div>
+      <div class="flex-1">
+        <div class="flex flex-wrap items-center gap-1.5 mb-1">
+          <span class="badge ${cc}">${ci} ${esc(a.category)}</span>
+          <span class="text-xs text-gray-400">${fl} ${esc(a.source)}</span>
+        </div>
+        <h3 class="font-semibold leading-snug mb-1.5">${esc(a.title_ca||a.title)}</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">${esc(a.summary_ca||'')}</p>
+        <a href="${escA(a.url)}" target="_blank" rel="noopener"
+           class="inline-block mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+          Font: ${esc(a.source)} ↗
+        </a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══ DARK MODE ═════════════════════════════════════════════════════════════
+function toggleDark() {
+  S.dark = !S.dark;
+  localStorage.setItem('dark', S.dark ? '1' : '0');
+  applyDark();
+}
+function applyDark() {
+  document.documentElement.classList.toggle('dark', S.dark);
+  document.getElementById('ico-dark').textContent = S.dark ? '☀️' : '🌙';
+}
+
+// ══ UI HELPERS ════════════════════════════════════════════════════════════
+function showLoad(v) {
+  const el = document.getElementById('loading');
+  el.style.display = v ? 'flex' : 'none';
+  el.classList.toggle('hidden', !v);
+}
+function showEmpty(icon='📭', title='Cap notícia', hint='') {
+  const el = document.getElementById('empty');
+  el.style.display = 'flex'; el.classList.remove('hidden');
+  document.getElementById('empty-icon').textContent  = icon;
+  document.getElementById('empty-title').textContent = title;
+  document.getElementById('empty-hint').textContent  = hint;
+}
+function hideEmpty() {
+  const el = document.getElementById('empty');
+  el.style.display = 'none'; el.classList.add('hidden');
+}
+function showBanner(msg) {
+  const el = document.getElementById('banner-error');
+  el.classList.remove('hidden'); el.classList.add('flex');
+  if (msg) document.getElementById('banner-msg').textContent = msg;
+}
+function hideBanner() {
+  const el = document.getElementById('banner-error');
+  el.classList.add('hidden'); el.classList.remove('flex');
+}
+let toastT;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => {
+    el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(10px)';
+  }, 3500);
+}
+function timeAgo(d) {
+  try {
+    const s = (Date.now() - new Date(d)) / 1000;
+    if (s < 3600)   return `fa ${Math.round(s/60)} min`;
+    if (s < 86400)  return `fa ${Math.round(s/3600)} h`;
+    if (s < 172800) return 'ahir';
+    return new Date(d).toLocaleDateString('ca',{day:'numeric',month:'short'});
+  } catch { return ''; }
+}
+const esc  = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const escA = s => (s||'#').replace(/"/g,'%22');
+
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+setInterval(loadStats, 30000);
+
+// ══ REFRESC AUTOMÀTIC (cada 30 min) ══════════════════════════════════════
+let pendingNewArts = null;
+
+async function silentRefresh() {
+  try {
+    const data = await apiGet({ action: 'top', limit: 10 });
+    const newArts = data.articles || [];
+    if (!newArts.length) return;
+    const currentIds = new Set(S.topArts.map(a => a.id));
+    const noves = newArts.filter(a => !currentIds.has(a.id));
+    if (noves.length > 0) {
+      pendingNewArts = newArts;
+      const n = noves.length;
+      document.getElementById('banner-nova-msg').textContent =
+        `${n} notícia${n > 1 ? 'es' : ''} nova${n > 1 ? 'es' : ''} disponible${n > 1 ? 's' : ''}`;
+      const el = document.getElementById('banner-nova');
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+  } catch {}
+}
+
+function hideBannerNova() {
+  const el = document.getElementById('banner-nova');
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+}
+
+function applyNewArticles() {
+  if (!pendingNewArts) return;
+  hideBannerNova();
+  S.topArts = pendingNewArts;
+  pendingNewArts = null;
+  if      (S.view === 'top')      render('list-top', S.topArts);
+  else if (S.view === 'all')      { S.offset = 0; S.articles = []; showLoad(true); loadAll(); }
+  else if (S.view === 'briefing') { showLoad(true); loadBriefing(); }
+}
+
+setInterval(silentRefresh, 30 * 60000);
+
+// ══ ÀUDIO BRIEFING (Web Speech API) ══════════════════════════════════════
+function toggleAudio() {
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
+    stopAudio();
+  } else {
+    startAudio();
+  }
+}
+
+async function startAudio() {
+  if (!window.speechSynthesis) {
+    toast('El teu navegador no suporta la síntesi de veu.');
+    return;
+  }
+  const btn = document.getElementById('btn-audio');
+  if (btn) btn.textContent = '⏳ Preparant...';
+
+  try {
+    const data = await apiGet({ action: 'top', limit: 10 });
+    const arts = data.articles || [];
+    console.log('[Àudio] Articles carregats per al briefing:', arts.length);
+    if (!arts.length) {
+      toast('No hi ha articles per al briefing.');
+      if (btn) btn.textContent = '🔊 Escolta el briefing';
+      return;
+    }
+
+    const text = 'Briefing de notícies en català. ' +
+      arts.map((a, i) =>
+        `Notícia ${i + 1}: ${a.title_ca || a.title}. ${a.summary_ca || ''}`
+      ).join('. ');
+
+    const doSpeak = () => {
+      const voices = speechSynthesis.getVoices();
+      const voice = voices.find(v => v.lang.startsWith('ca'))
+                 || voices.find(v => v.lang.startsWith('es'))
+                 || voices[0]
+                 || null;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang  = voice ? voice.lang : 'ca-ES';
+      if (voice) utterance.voice = voice;
+      utterance.rate  = 0.95;
+      utterance.onend = () => { if (btn) btn.textContent = '🔊 Escolta el briefing'; };
+      utterance.onerror = (ev) => {
+        // 'interrupted' és normal quan l'usuari prem Aturar — no mostrar error
+        if (ev.error !== 'interrupted' && ev.error !== 'canceled') {
+          toast('Error de síntesi de veu: ' + (ev.error || 'desconegut'));
+        }
+        if (btn) btn.textContent = '🔊 Escolta el briefing';
+      };
+      window.speechSynthesis.cancel(); // buida la cua per si hi havia una síntesi pendent
+      if (btn) btn.textContent = '⏹ Aturar';
+      window.speechSynthesis.speak(utterance);
+    };
+
+    // Les veus poden no estar carregades en el primer accés
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      doSpeak();
+    } else {
+      const onVoicesReady = () => {
+        speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+      speechSynthesis.onvoiceschanged = onVoicesReady;
+      // Fallback: si onvoiceschanged no es dispara (Edge/Android), intentar igualment
+      setTimeout(() => {
+        if (btn && btn.textContent === '⏳ Preparant...') {
+          speechSynthesis.onvoiceschanged = null;
+          doSpeak();
+        }
+      }, 1500);
+    }
+  } catch(e) {
+    toast('Error en iniciar la síntesi de veu: ' + e.message);
+    if (btn) btn.textContent = '🔊 Escolta el briefing';
+  }
+}
+
+function stopAudio() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  const btn = document.getElementById('btn-audio');
+  if (btn) btn.textContent = '🔊 Escolta el briefing';
+}
+
+// Atura l'àudio en canviar de pestanya o minimitzar
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopAudio(); });
+
+// ══ MAPA ══════════════════════════════════════════════════════════════════
+let mapaInit = false;
+let leafletMap = null;
+
+// Coordenades i noms dels països de les fonts RSS
+const PAIS_GEO = {
+  UK: { lat: 54,    lng: -2,    nom: 'Regne Unit' },
+  US: { lat: 38,    lng: -97,   nom: 'Estats Units' },
+  FR: { lat: 46.5,  lng: 2.5,   nom: 'França' },
+  DE: { lat: 51,    lng: 10,    nom: 'Alemanya' },
+  EU: { lat: 50.5,  lng: 4,     nom: 'Unió Europea' },
+  ES: { lat: 40,    lng: -3.5,  nom: 'Espanya' },
+};
+
+// Color per categoria
+const CAT_COLOR = {
+  'Conflicte':    '#ef4444',
+  'Política':     '#3b82f6',
+  'Economia':     '#22c55e',
+  'Tecnologia':   '#a855f7',
+  'Societat':     '#ec4899',
+  'Internacional':'#f97316',
+};
+
+async function initMapa() {
+  if (mapaInit) return;
+  mapaInit = true;
+
+  leafletMap = L.map('map', { zoomControl: true, scrollWheelZoom: false })
+    .setView([30, 10], 2);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CartoDB',
+    subdomains: 'abcd', maxZoom: 10,
+  }).addTo(leafletMap);
+
+  await renderMapa();
+}
+
+async function renderMapa() {
+  if (!leafletMap) return;
+
+  // Neteja capes anteriors
+  leafletMap.eachLayer(l => { if (l instanceof L.CircleMarker) leafletMap.removeLayer(l); });
+
+  const data = await apiGet({ action: 'map' });
+  const perPais = data.by_country || {};
+
+  // Assegura que tots els països monitoritzats apareguin al mapa
+  for (const codi of Object.keys(PAIS_GEO)) {
+    if (!perPais[codi]) perPais[codi] = [];
+  }
+
+  for (const [codi, noticies] of Object.entries(perPais)) {
+    const geo = PAIS_GEO[codi];
+    if (!geo) continue;
+
+    // Color dominant (categoria amb més articles)
+    const catCount = {};
+    noticies.forEach(a => { catCount[a.category] = (catCount[a.category]||0)+1; });
+    const catDominant = Object.entries(catCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Internacional';
+    const color = CAT_COLOR[catDominant] || '#94a3b8';
+
+    const teNoticies = noticies.length > 0;
+    const radi = teNoticies ? Math.min(35, 12 + noticies.length * 1.5) : 8;
+    const fillColor = teNoticies ? color : '#94a3b8';
+    const fillOpacity = teNoticies ? 0.85 : 0.4;
+
+    const marker = L.circleMarker([geo.lat, geo.lng], {
+      radius: radi, fillColor, color: '#fff',
+      weight: 2, opacity: 1, fillOpacity,
+    }).addTo(leafletMap);
+
+    const tooltipText = teNoticies
+      ? `<strong>${geo.nom}</strong><br>${noticies.length} notícies · ${catDominant}`
+      : `<strong>${geo.nom}</strong><br>Font monitoritzada`;
+    marker.bindTooltip(tooltipText, { permanent: false, direction: 'top' });
+
+    if (teNoticies) marker.on('click', () => mostrarNoticiesPais(codi, geo.nom, noticies));
+  }
+}
+
+function mostrarNoticiesPais(codi, nom, noticies) {
+  const panel = document.getElementById('mapa-noticies');
+  const llista = document.getElementById('mapa-llista');
+  document.getElementById('mapa-pais-nom').textContent = `${FLAGS[codi]||'🌐'} ${nom} — ${noticies.length} notícies`;
+  panel.classList.remove('hidden');
+
+  const top5 = noticies.sort((a,b)=>(b.relevance||0)-(a.relevance||0)).slice(0,5);
+  llista.innerHTML = top5.map(a => {
+    const cc = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
+    const ci = CAT_ICO[a.category] || '📰';
+    return `<div class="flex items-start gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-2 rounded-lg" onclick="openModal('${esc(a.id)}')">
+      <span class="badge ${cc} mt-0.5 flex-shrink-0">${ci} ${esc(a.category)}</span>
+      <span class="text-sm text-gray-800 dark:text-gray-200">${esc(a.title_ca||a.title)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ══ CHAT ══════════════════════════════════════════════════════════════════
+const chatHistory = [];
+
+async function enviarChat() {
+  const input = document.getElementById('chat-input');
+  const q = input.value.trim();
+  if (!q) return;
+
+  const btn = document.getElementById('btn-chat-send');
+  btn.disabled = true;
+  document.getElementById('ico-chat-send').textContent = '⏳';
+  input.value = '';
+
+  afegirMissatge('user', q);
+  const typing = afegirMissatge('assistant', '...');
+
+  try {
+    // Carrega context de notícies
+    const data = await apiGet({ action: 'top', limit: 20 });
+    const arts = data.articles || [];
+    const context = arts.map((a, i) =>
+      `${i+1}. [${a.category}] ${a.title_ca}: ${a.summary_ca}`
+    ).join('\n\n');
+
+    chatHistory.push({ role: 'user', content: q });
+
+    const resp = await apiPost({ action: 'claude' }, {
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: `Ets un assistent periodístic expert en actualitat internacional. Respon en català de forma clara i concisa basant-te en les notícies d'avui que tens disponibles. Si la pregunta no té relació amb les notícies, respon igualment de forma útil.\n\nNotícies disponibles avui:\n${context}`,
+      messages: chatHistory,
+    });
+
+    const text = (resp.content || []).find(b => b.type === 'text')?.text || 'No he pogut obtenir resposta.';
+    typing.textContent = text;
+    chatHistory.push({ role: 'assistant', content: text });
+
+  } catch(e) {
+    typing.textContent = 'Error: ' + e.message;
+    chatHistory.pop();
+  } finally {
+    btn.disabled = false;
+    document.getElementById('ico-chat-send').textContent = '➤';
+  }
+}
+
+function afegirMissatge(rol, text) {
+  const msgs = document.getElementById('chat-msgs');
+
+  // Esborra el missatge inicial si existeix
+  const placeholder = msgs.querySelector('.text-center');
+  if (placeholder) placeholder.remove();
+
+  const isUser = rol === 'user';
+  const div = document.createElement('div');
+  div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+  div.innerHTML = `
+    <div class="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed
+      ${isUser
+        ? 'bg-blue-600 text-white rounded-br-sm'
+        : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-sm'}">
+      <span style="white-space:pre-wrap">${esc(text)}</span>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Retorna referència al span per actualitzar-lo
+  return div.querySelector('span');
+}
+
+// ══ RESUM DIARI ═══════════════════════════════════════════════════════════
+async function generarResum() {
+  const btn = document.getElementById('btn-resum');
+  const ico  = document.getElementById('ico-resum');
+  const box  = document.getElementById('resum-box');
+  const txt  = document.getElementById('resum-text');
+
+  btn.disabled = true;
+  ico.classList.add('spin');
+  txt.textContent = '';
+  box.classList.remove('hidden');
+  txt.textContent = 'Generant resum...';
+
+  try {
+    const data = await apiGet({ action: 'top', limit: 15 });
+    const arts = data.articles || [];
+    if (!arts.length) { txt.textContent = 'No hi ha notícies per resumir.'; return; }
+
+    const context = arts.map((a, i) =>
+      `${i+1}. [${a.category}] ${a.title_ca}: ${a.summary_ca}`
+    ).join('\n\n');
+
+    const resp = await apiPost({ action: 'claude' }, {
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: `Ets un periodista expert en català. Redacta resums clars i entenedors.`,
+      messages: [{
+        role: 'user',
+        content: `Basant-te en aquestes notícies d'avui, redacta un resum narratiu en català de 3-4 paràgrafs que expliqui què passa al món. Escriu-ho com si fos l'obertura d'un informatiu: directe, clar i amb context. No facis llistes, escriu text corregut.\n\nNotícies:\n${context}`
+      }]
+    });
+
+    const text = (resp.content || []).find(b => b.type === 'text')?.text || '';
+    txt.textContent = text || 'No s\'ha pogut generar el resum.';
+  } catch(e) {
+    txt.textContent = 'Error en generar el resum: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    ico.classList.remove('spin');
+  }
+}
+</script>
+</body>
+</html>
