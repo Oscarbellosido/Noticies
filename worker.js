@@ -17,6 +17,11 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const MODEL               = 'claude-haiku-4-5';
+// AI Gateway URL — evita el bloqueig de Cloudflare Workers → api.anthropic.com
+// Crea el gateway a: Cloudflare Dashboard → AI → AI Gateway → "noticies-gw"
+const CF_ACCOUNT_ID       = '06ae974d240fa2b27e2da3fcd783a8c9';
+const AI_GATEWAY_SLUG     = 'noticies-gw';
+const ANTHROPIC_URL       = `https://gateway.ai.cloudflare.com/v1/${CF_ACCOUNT_ID}/${AI_GATEWAY_SLUG}/anthropic/v1/messages`;
 const FETCH_INTERVAL_HOURS = 6;
 const MAX_PER_SOURCE      = 8;
 const MIN_RELEVANCE       = 5;
@@ -145,14 +150,15 @@ async function handleFetch(env, ctx) {
   }
   await env.ARTICLES.put('fetch_lock', String(Date.now()), { expirationTtl: 600 });
 
-  // Retorna immediatament i processa en background (evita timeout de CF Workers)
-  ctx.waitUntil(
-    runFetch(env).catch(async e => {
-      await env.ARTICLES.put('fetch_debug', JSON.stringify({ error: e.message, stack: e.stack }));
-      await env.ARTICLES.delete('fetch_lock');
-    })
-  );
-  return json({ status: 'started' });
+  // Executa síncronament (ctx.waitUntil causa problemes de xarxa des de CF Workers)
+  try {
+    await runFetch(env);
+    return json({ status: 'done' });
+  } catch(e) {
+    await env.ARTICLES.put('fetch_debug', JSON.stringify({ error: e.message, stack: e.stack }));
+    await env.ARTICLES.delete('fetch_lock');
+    return json({ status: 'error', error: e.message });
+  }
 }
 
 async function runFetch(env) {
@@ -268,7 +274,7 @@ async function handleMap(env) {
 async function handleClaude(request, env) {
   if (request.method !== 'POST') return json({ error: 'POST required' }, 405);
   const body = await request.json();
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
@@ -371,13 +377,16 @@ Respon ÚNICAMENT amb un array JSON vàlid. Cap text fora del JSON.`;
 
   const user = `Processa ${batch.length} articles:\n\n${lines}`;
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
     headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01' },
     body: JSON.stringify({ model:MODEL, max_tokens:4096, system, messages:[{role:'user',content:user}] }),
-    signal: AbortSignal.timeout(240_000),
   });
 
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '(no body)');
+    throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+  }
   const data = await resp.json();
   const text = (data.content||[]).find(b=>b.type==='text')?.text || '';
   if (!text) return [];
