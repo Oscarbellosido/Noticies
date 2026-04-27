@@ -38,8 +38,9 @@ Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix 
 
 | Action | Mètode | Descripció |
 |--------|--------|-----------|
-| `news` | GET | Llista articles amb filtres (category, country, search, limit, offset) |
-| `top` | GET | Top N articles més rellevants (últims 2 dies) |
+| `news` | GET | Llista articles amb filtres (category, country, search, topic, min_relevance, limit, offset) |
+| `top` | GET | Top N articles més rellevants (últims 2 dies), accepta filtre `country` |
+| `topics` | GET | Top 12 temes trending (últims 2 dies) amb comptador d'articles |
 | `fetch` | GET | Inicia descàrrega i processament en background |
 | `stats` | GET | Estadístiques (total, per categoria, per país, is_fetching) |
 | `favorite` | POST | Toggle favorit d'un article `{id}` |
@@ -70,6 +71,7 @@ Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix 
 - max_tokens: 4096
 - **No usar `thinking`** — no compatible amb Haiku
 - **Les crides van via Cloudflare AI Gateway** (`noticies-gw`) — vegeu secció AI Gateway
+- **Fallback `summary_ca`**: si Claude no retorna `resum_ca`, s'usa `raw.description` (descripció original RSS) en lloc de cadena buida — garanteix que la cerca funcioni encara que el resum no estigui traduït
 
 ### Cloudflare AI Gateway
 - **Problema**: `api.anthropic.com` està darrera de Cloudflare. Els Workers no poden fer subrequests a hosts Cloudflare-proxied (retorna HTTP 403 "error code: 1000").
@@ -106,6 +108,11 @@ Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix 
 Països disponibles al dropdown:
 `UK, US, FR, DE, EU, ES, CA (Catalunya), QA (Qatar), HK (Hong Kong), ME (Orient Mitjà)`
 
+- El desplegable és un component **custom HTML/CSS** (no un `<select>` natiu) perquè Windows no renderitza emojis de bandera en controls natius del SO
+- La llista de països es defineix a `COUNTRY_LIST` al JavaScript
+- El filtre de país funciona a totes les vistes: **Top**, **Totes** i redirigeix a Totes des de les altres
+- `handleGetTop` (worker.js) també accepta i aplica el paràmetre `country`
+
 ---
 
 ## Frontend (`INDEX.html`)
@@ -115,12 +122,25 @@ Països disponibles al dropdown:
 - Tailwind CSS CDN (dark mode: `class`) — **config DESPRÉS del CDN**
 - `fetch()` per cridar el worker
 
+### Estat global (`S`)
+```js
+{
+  view, category, country, search,
+  topic,    // tema trending actiu (filtra per topic_id)
+  minRel,   // rellevància mínima (1 = totes, 5 = alta, 8 = molt alta)
+  offset, limit, articles, topArts, favArts, perspArts,
+  dark, modalId, isFetching
+}
+```
+`category`, `country` i `minRel` es persisteixen a `localStorage` i es restauren en cada càrrega.
+
 ### Funcions principals
 
 | Funció | Descripció |
 |--------|-----------|
-| `loadTop()` | Carrega top 10 notícies |
-| `loadAll()` | Carrega totes amb filtres (categoria, país, cerca) |
+| `loadTop()` | Carrega top 10 notícies (passa `country: S.country`) |
+| `loadAll()` | Carrega totes amb filtres (categoria, país, cerca, topic, min_relevance) |
+| `loadTopics()` | Carrega trending topics i mostra la secció 🔥 Trending a "Totes" |
 | `loadBriefing()` | Vista compacta de les 15 més rellevants |
 | `loadFavs()` | Carrega favorits |
 | `loadStats()` | Mostra estadístiques al header |
@@ -129,12 +149,24 @@ Països disponibles al dropdown:
 | `openModal(id)` | Obre modal amb detall de l'article |
 | `apiGet(params)` | Helper GET al worker |
 | `apiPost(params, body)` | Helper POST al worker (action via URL, dades via body) |
+| `initCountryDD()` | Inicialitza el desplegable de països custom (crida al DOMContentLoaded) |
+| `toggleCountryDD()` | Obre/tanca el desplegable de països |
+| `pickCountry(v)` | Selecciona un país, desa a localStorage, refresca vista activa |
+| `setCategory(cat)` | Selecciona categoria, desa a localStorage |
+| `setRelevance(v)` | Canvia `S.minRel` (1/5/8), desa a localStorage, refresca |
+| `updateRelButtons(active)` | Actualitza estil visual dels botons de rellevància |
+| `setTopic(id)` | Activa/desactiva filtre de tema (toggle); buida la cerca |
 
 ### Vistes
 - **⭐ Top**: 10 notícies més rellevants dels últims 2 dies
-- **📰 Totes**: totes les notícies amb filtres per categoria i país
+- **📰 Totes**: totes les notícies amb filtres per categoria, país, rellevància i tema trending
 - **📋 Briefing**: vista de lectura ràpida (~2 min)
 - **❤️ Favs**: notícies guardades com a favorites
+
+### Funcionalitats de la vista "Totes"
+- **Filtre rellevància**: botons `Totes / Alta ≥5 / Molt alta ≥8` — passa `min_relevance` al backend
+- **🔥 Trending topics**: etiquetes clicables generades a partir dels `topic_id` Claude dels últims 2 dies. Clicar una etiqueta filtra per aquell tema; clicar de nou o "Tots" el treu
+- **Badge notícies noves**: quan el refresc automàtic (cada 30 min) detecta articles nous, apareix un badge vermell `●N` sobre el botó ⭐ Top i un banner blau amb botó "Actualitzar"
 
 ### Categories i colors Tailwind
 ```js
@@ -199,6 +231,11 @@ crons = ["0 4,12,18 * * *"]
 | Worker encallat | Lock de fetch no s'esborra | Cridar `?action=clearlock` |
 | HTTP 403 "error code: 1000" | `api.anthropic.com` és Cloudflare-proxied, Workers no hi pot accedir | Usar Cloudflare AI Gateway (`noticies-gw`) |
 | 0 articles guardats al cron | Idem — totes les crides a Claude fallen | Idem — AI Gateway ho soluciona |
+| Cerca no troba res | `summary_ca` era cadena buida si Claude no retornava resum | Fallback a `raw.description` (worker.js:405) |
+| Filtre de país no funciona a Top | `handleGetTop` ignorava el paràmetre `country` | Afegit filtre `(!cntry \|\| a.country === cntry)` |
+| Banderes no es veuen al desplegable | `<select>` natiu de Windows no renderitza emojis de bandera | Substituït per desplegable custom HTML/CSS amb imatges PNG (flagcdn.com) i SVG Base64 (estelada) |
+| Trending no apareix | `trending-wrap` queda `hidden` si `?action=topics` no retorna res | Normal si no hi ha articles amb `topic_id`; actualitza les notícies primer |
+| Filtre rellevància/trending no visible | Aquests elements només es mostren a la vista "📰 Totes" | Clicar "Totes" per veure'ls |
 
 ---
 

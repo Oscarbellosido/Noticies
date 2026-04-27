@@ -27,6 +27,8 @@
   .leaflet-popup-content { font-family: system-ui, sans-serif; min-width: 200px; }
   .map-legend span { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:middle; }
   .badge-nova { font-size:.6rem; font-weight:700; background:#16a34a; color:#fff; padding:2px 7px; border-radius:999px; letter-spacing:.04em; white-space:nowrap; }
+  .card-read  { opacity: 0.52; }
+  .card-read:hover { opacity: 0.8; }
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
@@ -35,6 +37,13 @@
 <div id="banner-error" class="hidden bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
   <span class="text-base">⚠️</span>
   <span id="banner-msg">No es pot connectar a api.php</span>
+</div>
+
+<!-- ══ BANNER ALERTA PARAULES CLAU ════════════════════════════════════════ -->
+<div id="banner-alert" class="hidden bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+  <span class="text-base">🔔</span>
+  <span id="banner-alert-msg"></span>
+  <button onclick="hideBannerAlert()" class="ml-auto text-amber-400 hover:text-amber-600 text-base leading-none">✕</button>
 </div>
 
 <!-- ══ BANNER NOVES NOTÍCIES ═══════════════════════════════════════════════ -->
@@ -70,24 +79,24 @@
       </svg>
     </div>
 
-    <select id="sel-country" onchange="S.country=this.value; if(S.view==='all') refreshAll()"
-      class="py-1.5 px-2 rounded-lg border border-gray-200 dark:border-gray-700
-             bg-gray-100 dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <option value="">Tots els països</option>
-      <option value="UK">Regne Unit 🇬🇧</option>
-      <option value="US">EUA 🇺🇸</option>
-      <option value="FR">França 🇫🇷</option>
-      <option value="DE">Alemanya 🇩🇪</option>
-      <option value="EU">Unió Europea 🇪🇺</option>
-      <option value="ES">Espanya 🇪🇸</option>
-      <option value="QA">Qatar 🇶🇦</option>
-      <option value="ME">Orient Mitjà 🌍</option>
-      <option value="HK">Hong Kong 🇭🇰</option>
-      <option value="CA">Catalunya 🏴󠁥󠁳󠁣󠁴󠁿</option>
-    </select>
+    <div class="relative" id="country-dd">
+      <button type="button" onclick="toggleCountryDD()"
+        class="py-1.5 px-2 rounded-lg border border-gray-200 dark:border-gray-700
+               bg-gray-100 dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500
+               flex items-center gap-1.5 min-w-[130px]">
+        <span id="dd-country-label">Tots els països</span>
+        <svg class="w-3 h-3 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="dd-country-menu"
+        class="hidden absolute top-full left-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200
+               dark:border-gray-700 rounded-lg shadow-xl z-[100] py-1 min-w-[170px]">
+      </div>
+    </div>
 
     <div class="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 ml-auto">
-      <button onclick="setView('top')"          id="btn-top"          class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">⭐ Top</button>
+      <button onclick="setView('top')"          id="btn-top"          class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold relative">⭐ Top<span id="badge-nova" class="hidden absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none"></span></button>
       <button onclick="setView('all')"          id="btn-all"          class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">📰 Totes</button>
       <button onclick="setView('briefing')"     id="btn-briefing"     class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">📋 Briefing</button>
       <button onclick="setView('favs')"         id="btn-favs"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">❤️ Favs</button>
@@ -106,6 +115,32 @@
       </svg>
       <span>Actualitzar</span>
     </button>
+
+    <!-- Alertes per paraules clau -->
+    <div class="relative" id="alert-dd">
+      <button onclick="toggleAlertPanel()" title="Alertes de paraules clau"
+        class="relative p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">
+        🔔
+        <span id="alert-dot" class="hidden absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900"></span>
+      </button>
+      <!-- Panell alertes -->
+      <div id="alert-panel"
+        class="hidden absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200
+               dark:border-gray-700 rounded-xl shadow-xl z-[100] p-4 w-72">
+        <h3 class="font-semibold text-sm mb-0.5">🔔 Alertes de paraules clau</h3>
+        <p class="text-xs text-gray-400 mb-3">Rebràs una notificació quan arribin notícies amb aquestes paraules</p>
+        <div class="flex gap-2 mb-3">
+          <input id="alert-input" type="text" placeholder="Paraula clau..."
+            class="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700
+                   bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onkeydown="if(event.key==='Enter') addAlert()"/>
+          <button onclick="addAlert()"
+            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg">+</button>
+        </div>
+        <div id="alert-list" class="flex flex-col gap-1.5 max-h-44 overflow-y-auto"></div>
+        <p id="alert-empty-hint" class="text-xs text-gray-400 mt-1 text-center">Cap alerta configurada</p>
+      </div>
+    </div>
 
     <button onclick="clearCache()" title="Netejar caché" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">🗑️</button>
 
@@ -157,6 +192,13 @@
   </div>
 
   <div id="view-all" class="hidden">
+    <!-- Barra de rellevància -->
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <span class="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">Rellevància:</span>
+      <button onclick="setRelevance(1)" data-rel="1" class="relbtn px-2.5 py-1 rounded-full text-xs border">Totes</button>
+      <button onclick="setRelevance(5)" data-rel="5" class="relbtn px-2.5 py-1 rounded-full text-xs border">Alta ≥5</button>
+      <button onclick="setRelevance(8)" data-rel="8" class="relbtn px-2.5 py-1 rounded-full text-xs border">Molt alta ≥8</button>
+    </div>
     <div id="list-all" class="flex flex-col gap-3"></div>
     <div class="flex justify-center mt-6">
       <button id="btn-more" onclick="loadMore()"
@@ -346,17 +388,32 @@ const CAT_COL = {
 };
 const CAT_ICO = { Política:'🏛️', Economia:'📈', Tecnologia:'💻', Internacional:'🌍', Societat:'👥', Conflicte:'⚔️' };
 const FLAGS   = { UK:'🇬🇧', US:'🇺🇸', FR:'🇫🇷', DE:'🇩🇪', EU:'🇪🇺', ES:'🇪🇸', QA:'🇶🇦', ME:'🌍', HK:'🇭🇰', CA:'🏴󠁥󠁳󠁣󠁴󠁿' };
+function countryFlag(country) {
+  const c = COUNTRY_LIST.find(x => x.v === country);
+  if (c && c.img) return `<img src="${c.img}" width="16" height="12" class="inline-block rounded-sm align-middle flex-shrink-0" alt="${country}" style="margin-bottom:1px">`;
+  return c?.e || '🌐';
+}
 
 const S = {
-  view:'top', category:'', country:'', search:'', offset:0, limit:20,
+  view:'top', category:'', country:'', search:'', topic:'', minRel:1, offset:0, limit:20,
   articles:[], topArts:[], favArts:[], perspArts:[], dark:false, modalId:null, isFetching:false,
 };
 
 // ══ INIT ══════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
-  S.dark = localStorage.getItem('dark') === '1';
+  S.dark     = localStorage.getItem('dark')     === '1';
+  S.category = localStorage.getItem('category') || '';
+  S.country  = localStorage.getItem('country')  || '';
+  S.minRel   = parseInt(localStorage.getItem('minRel') || '1');
   applyDark();
-  updateCatButtons('');
+  initCountryDD();
+  // Restaura país al desplegable
+  if (S.country) {
+    const c = COUNTRY_LIST.find(x => x.v === S.country);
+    if (c) document.getElementById('dd-country-label').innerHTML = `${flagHtml(c)} ${c.l}`;
+  }
+  updateCatButtons(S.category);
+  updateRelButtons(S.minRel);
   updateViewButtons('top');
   showView('top');
   showLoad(true);
@@ -392,7 +449,7 @@ async function setView(v) {
   else if (v === 'briefing')     loadBriefing();
   else if (v === 'favs')         loadFavs();
   else if (v === 'perspectives') loadPerspectives();
-  else if (v === 'chat')         { showLoad(false); setTimeout(() => document.getElementById('chat-input').focus(), 100); }
+  else if (v === 'chat')         { showLoad(false); initChat(); setTimeout(() => document.getElementById('chat-input').focus(), 100); }
   else if (v === 'mapa')         { showLoad(false); setTimeout(() => initMapa(), 100); }
 }
 
@@ -411,7 +468,7 @@ function updateViewButtons(active) {
 // ══ CÀRREGA DES DEL WORKER ════════════════════════════════════════════════
 async function loadTop() {
   try {
-    const data = await apiGet({ action: 'top', limit: 10 });
+    const data = await apiGet({ action: 'top', limit: 10, country: S.country });
     S.topArts = data.articles || [];
     render('list-top', S.topArts);
     if (!S.topArts.length) showEmpty('📭', 'Cap notícia disponible',
@@ -426,12 +483,14 @@ async function loadTop() {
 async function loadAll(append = false) {
   try {
     const data = await apiGet({
-      action:   'news',
-      category: S.category,
-      country:  S.country,
-      search:   S.search,
-      limit:    S.limit,
-      offset:   S.offset,
+      action:        'news',
+      category:      S.category,
+      country:       S.country,
+      search:        S.search,
+      topic:         S.topic,
+      min_relevance: S.minRel > 1 ? S.minRel : '',
+      limit:         S.limit,
+      offset:        S.offset,
     });
     const page = data.articles || [];
     S.articles = append ? [...S.articles, ...page] : page;
@@ -497,7 +556,7 @@ function renderPerspectives(groups) {
   el.innerHTML = groups.map(g => {
     const label = humanizeTopic(g.topic_id);
     const cards = g.articles.map(a => {
-      const fl  = FLAGS[a.country] || '🌐';
+      const fl  = countryFlag(a.country);
       const cc  = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
       const ci  = CAT_ICO[a.category] || '📰';
       const sum = a.summary_ca ? a.summary_ca.slice(0, 160) + (a.summary_ca.length > 160 ? '…' : '') : '';
@@ -556,6 +615,7 @@ async function refreshAll() {
 // ══ FILTRES ═══════════════════════════════════════════════════════════════
 function setCategory(cat) {
   S.category = cat;
+  localStorage.setItem('category', cat);
   updateCatButtons(cat);
   if (S.view === 'all') { S.offset = 0; showLoad(true); hideEmpty(); loadAll(); }
   else setView('all');
@@ -574,6 +634,86 @@ function updateCatButtons(active) {
     ab.classList.add('bg-blue-600','text-white','border-blue-600');
   }
 }
+
+// ── Desplegable de països custom amb imatges de bandera (Windows no renderitza emojis de bandera) ──
+const F = 'https://flagcdn.com/20x15';  // flagcdn.com — imatges de bandera fiables
+const COUNTRY_LIST = [
+  { v:'',   l:'Tots els països', img: null },
+  { v:'UK', l:'Regne Unit',      img: `${F}/gb.png` },
+  { v:'US', l:'EUA',             img: `${F}/us.png` },
+  { v:'FR', l:'França',          img: `${F}/fr.png` },
+  { v:'DE', l:'Alemanya',        img: `${F}/de.png` },
+  { v:'EU', l:'Unió Europea',    img: `${F}/eu.png` },
+  { v:'ES', l:'Espanya',         img: `${F}/es.png` },
+  { v:'QA', l:'Qatar',           img: `${F}/qa.png` },
+  { v:'ME', l:'Orient Mitjà',    img: null, e: '🌍' },
+  { v:'HK', l:'Hong Kong',       img: `${F}/hk.png` },
+  { v:'CA', l:'Catalunya',       img: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMCAyMCI+PHJlY3Qgd2lkdGg9IjMwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjRkNERDA5Ii8+PHJlY3QgeT0iMi44NiIgd2lkdGg9IjMwIiBoZWlnaHQ9IjIuODYiIGZpbGw9IiNEQTEyMUEiLz48cmVjdCB5PSI4LjU3IiB3aWR0aD0iMzAiIGhlaWdodD0iMi44NiIgZmlsbD0iI0RBMTIxQSIvPjxyZWN0IHk9IjE0LjI4IiB3aWR0aD0iMzAiIGhlaWdodD0iMi44NiIgZmlsbD0iI0RBMTIxQSIvPjxwb2x5Z29uIHBvaW50cz0iMCwwIDE0LDEwIDAsMjAiIGZpbGw9IiMwMDMyQTAiLz48cG9seWdvbiBwb2ludHM9IjUuNSw2LjUgNi41LDkuNSA5LjUsOS41IDcsMTEuNSA4LDE0LjUgNS41LDEyLjUgMywxNC41IDQsMTEuNSAxLjUsOS41IDQuNSw5LjUiIGZpbGw9IndoaXRlIi8+PC9zdmc+' },
+];
+
+function flagHtml(c) {
+  if (c.img) return `<img src="${c.img}" width="20" height="14" class="inline-block rounded-sm align-middle flex-shrink-0" alt="">`;
+  return c.e ? `<span class="text-base leading-none">${c.e}</span>` : '<span class="w-5"></span>';
+}
+
+function initCountryDD() {
+  const menu = document.getElementById('dd-country-menu');
+  menu.innerHTML = COUNTRY_LIST.map(c =>
+    `<button onclick="pickCountry('${c.v}')"
+       class="w-full text-left px-3 py-1.5 text-sm flex items-center gap-2
+              hover:bg-gray-100 dark:hover:bg-gray-800 whitespace-nowrap">
+       ${flagHtml(c)}<span>${c.l}</span>
+     </button>`
+  ).join('');
+}
+
+function toggleCountryDD() {
+  document.getElementById('dd-country-menu').classList.toggle('hidden');
+}
+
+function pickCountry(v) {
+  S.country = v;
+  localStorage.setItem('country', v);
+  const c = COUNTRY_LIST.find(x => x.v === v);
+  document.getElementById('dd-country-label').innerHTML = `${flagHtml(c)} ${c.l}`;
+  document.getElementById('dd-country-menu').classList.add('hidden');
+  S.offset = 0; showLoad(true); hideEmpty();
+  if (S.view === 'all') loadAll();
+  else if (S.view === 'top') loadTop();
+  else setView('all');
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('country-dd');
+  if (dd && !dd.contains(e.target))
+    document.getElementById('dd-country-menu').classList.add('hidden');
+  const add = document.getElementById('alert-dd');
+  if (add && !add.contains(e.target))
+    document.getElementById('alert-panel').classList.add('hidden');
+});
+
+// ── Filtre de rellevància ─────────────────────────────────────────────────
+function setRelevance(v) {
+  S.minRel = v;
+  localStorage.setItem('minRel', v);
+  updateRelButtons(v);
+  if (S.view === 'all') { S.offset = 0; S.topic = ''; showLoad(true); hideEmpty(); loadAll(); }
+  else setView('all');
+}
+
+function updateRelButtons(active) {
+  document.querySelectorAll('.relbtn').forEach(b => {
+    const isActive = parseInt(b.dataset.rel) === active;
+    b.className = b.className.replace(/bg-indigo-600 text-white|bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300/g, '');
+    b.classList.toggle('bg-indigo-600', isActive);
+    b.classList.toggle('text-white',    isActive);
+    b.classList.toggle('bg-white',      !isActive);
+    b.classList.toggle('dark:bg-gray-800', !isActive);
+    b.classList.toggle('text-gray-600', !isActive);
+    b.classList.toggle('dark:text-gray-300', !isActive);
+  });
+}
+
 
 let searchTimer;
 function debounceSearch(v) {
@@ -667,6 +807,7 @@ async function quickFav(id, btn) {
 // ══ MODAL ═════════════════════════════════════════════════════════════════
 function openModal(id) {
   S.modalId = id;
+  markRead(id);
   const a = allArts().find(x => x.id === id);
   if (!a) return;
   const cc = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
@@ -713,15 +854,16 @@ function render(id, arts) {
 function card(a) {
   const cc    = CAT_COL[a.category] || 'bg-gray-100 text-gray-600';
   const ci    = CAT_ICO[a.category] || '📰';
-  const fl    = FLAGS[a.country]    || '🌐';
+  const fl    = countryFlag(a.country);
   const pct   = (a.relevance||5) / 10 * 100;
   const fav   = a.is_favorite ? '❤️' : '🤍';
   const dt    = a.published_at ? timeAgo(a.published_at) : '';
-  const isNova = a.published_at && (Date.now() - new Date(a.published_at)) < 2 * 3600000;
+  const isNova = a.published_at && (Date.now() - new Date(a.published_at)) < 6 * 3600000;
+  const read  = isRead(a.id);
   return `
-  <div class="card bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800
+  <div class="card ${read ? 'card-read' : ''} bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800
               hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900
-              cursor-pointer group transition-shadow" onclick="openModal('${esc(a.id)}')">
+              cursor-pointer group transition-shadow" data-art-id="${esc(a.id)}" onclick="openModal('${esc(a.id)}')">
     <div class="p-4">
       <div class="flex items-start gap-3">
         <div class="flex-1 min-w-0">
@@ -757,7 +899,7 @@ function renderBriefing(arts) {
   el.innerHTML = arts.map((a,i) => {
     const cc = CAT_COL[a.category]||'bg-gray-100 text-gray-600';
     const ci = CAT_ICO[a.category]||'📰';
-    const fl = FLAGS[a.country]||'🌐';
+    const fl = countryFlag(a.country);
     return `
     <div class="${i<arts.length-1?'pb-5 border-b border-gray-100 dark:border-gray-800':''} flex gap-4">
       <div class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400
@@ -858,6 +1000,29 @@ async function silentRefresh() {
       const el = document.getElementById('banner-nova');
       el.classList.remove('hidden');
       el.classList.add('flex');
+      // Badge al botó Top
+      const badge = document.getElementById('badge-nova');
+      if (badge) { badge.textContent = n; badge.classList.remove('hidden'); }
+
+      // ── Comprovació d'alertes de paraules clau ──────────────────────────
+      const alerts = getAlerts();
+      if (alerts.length) {
+        const matchedArts = noves.filter(a => {
+          const text = ((a.title_ca || a.title) + ' ' + (a.summary_ca || '')).toLowerCase();
+          return alerts.some(kw => text.includes(kw));
+        });
+        if (matchedArts.length > 0) {
+          const kwMatched = [...new Set(alerts.filter(kw =>
+            matchedArts.some(a => ((a.title_ca||a.title)+' '+(a.summary_ca||'')).toLowerCase().includes(kw))
+          ))];
+          document.getElementById('banner-alert-msg').textContent =
+            `${matchedArts.length} notícia${matchedArts.length > 1 ? 'es' : ''} sobre: ${kwMatched.slice(0,3).map(k=>'"'+k+'"').join(', ')}`;
+          const alertEl = document.getElementById('banner-alert');
+          alertEl.classList.remove('hidden'); alertEl.classList.add('flex');
+          const dot = document.getElementById('alert-dot');
+          if (dot) dot.classList.remove('hidden');
+        }
+      }
     }
   } catch {}
 }
@@ -866,6 +1031,8 @@ function hideBannerNova() {
   const el = document.getElementById('banner-nova');
   el.classList.add('hidden');
   el.classList.remove('flex');
+  const badge = document.getElementById('badge-nova');
+  if (badge) badge.classList.add('hidden');
 }
 
 function applyNewArticles() {
@@ -1069,6 +1236,18 @@ function mostrarNoticiesPais(codi, nom, noticies) {
 
 // ══ CHAT ══════════════════════════════════════════════════════════════════
 const chatHistory = [];
+let chatContext = null; // es carrega una sola vegada per sessió
+
+async function initChat() {
+  if (chatContext) return; // ja carregat
+  try {
+    const data = await apiGet({ action: 'top', limit: 8 });
+    const arts = data.articles || [];
+    chatContext = arts.map((a, i) =>
+      `${i+1}. [${a.category}] ${a.title_ca}: ${(a.summary_ca||'').slice(0, 200)}`
+    ).join('\n\n');
+  } catch { chatContext = ''; }
+}
 
 async function enviarChat() {
   const input = document.getElementById('chat-input');
@@ -1084,19 +1263,14 @@ async function enviarChat() {
   const typing = afegirMissatge('assistant', '...');
 
   try {
-    // Carrega context de notícies
-    const data = await apiGet({ action: 'top', limit: 20 });
-    const arts = data.articles || [];
-    const context = arts.map((a, i) =>
-      `${i+1}. [${a.category}] ${a.title_ca}: ${a.summary_ca}`
-    ).join('\n\n');
+    await initChat(); // no-op si ja carregat
 
     chatHistory.push({ role: 'user', content: q });
 
     const resp = await apiPost({ action: 'claude' }, {
       model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: `Ets un assistent periodístic expert en actualitat internacional. Respon en català de forma clara i concisa basant-te en les notícies d'avui que tens disponibles. Si la pregunta no té relació amb les notícies, respon igualment de forma útil.\n\nNotícies disponibles avui:\n${context}`,
+      max_tokens: 512,
+      system: `Ets un assistent periodístic. Respon en català, breu i clar, basant-te en les notícies disponibles.\n\nNotícies d'avui:\n${chatContext}`,
       messages: chatHistory,
     });
 
@@ -1135,6 +1309,91 @@ function afegirMissatge(rol, text) {
 
   // Retorna referència al span per actualitzar-lo
   return div.querySelector('span');
+}
+
+// ══ ARTICLES LLEGITS (localStorage, zero cost) ════════════════════════════
+const READ_KEY = 'noticies_read';
+let _readIds = null;
+
+function getReadIds() {
+  if (!_readIds) {
+    try { _readIds = new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); }
+    catch { _readIds = new Set(); }
+  }
+  return _readIds;
+}
+
+function markRead(id) {
+  const ids = getReadIds();
+  if (ids.has(id)) return; // ja marcat
+  ids.add(id);
+  const arr = [...ids];
+  if (arr.length > 1000) arr.splice(0, arr.length - 1000); // màxim 1000 IDs
+  _readIds = new Set(arr);
+  localStorage.setItem(READ_KEY, JSON.stringify(arr));
+  // Actualitza visualment totes les targetes amb aquest ID
+  document.querySelectorAll(`[data-art-id="${id}"]`).forEach(el => el.classList.add('card-read'));
+}
+
+function isRead(id) { return getReadIds().has(id); }
+
+// ══ ALERTES DE PARAULES CLAU (zero cost) ══════════════════════════════════
+const ALERTS_KEY = 'noticies_alerts';
+
+function getAlerts() {
+  try { return JSON.parse(localStorage.getItem(ALERTS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveAlerts(arr) { localStorage.setItem(ALERTS_KEY, JSON.stringify(arr)); }
+
+function addAlert() {
+  const inp = document.getElementById('alert-input');
+  const kw = inp.value.trim().toLowerCase();
+  if (!kw) return;
+  const alerts = getAlerts();
+  if (alerts.includes(kw)) { toast('Aquesta paraula ja és a la llista'); return; }
+  alerts.push(kw);
+  saveAlerts(alerts);
+  inp.value = '';
+  renderAlertList();
+  toast(`🔔 Alerta afegida: "${kw}"`);
+}
+
+function removeAlert(kw) {
+  saveAlerts(getAlerts().filter(a => a !== kw));
+  renderAlertList();
+}
+
+function renderAlertList() {
+  const alerts = getAlerts();
+  const list = document.getElementById('alert-list');
+  const hint = document.getElementById('alert-empty-hint');
+  if (!list) return;
+  if (!alerts.length) {
+    list.innerHTML = '';
+    if (hint) hint.classList.remove('hidden');
+    return;
+  }
+  if (hint) hint.classList.add('hidden');
+  list.innerHTML = alerts.map(kw =>
+    `<div class="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5 text-sm">
+      <span class="text-gray-700 dark:text-gray-300">🔍 ${esc(kw)}</span>
+      <button onclick="removeAlert('${esc(kw)}')" class="text-gray-400 hover:text-red-500 ml-2 text-base leading-none font-bold">✕</button>
+    </div>`
+  ).join('');
+}
+
+function toggleAlertPanel() {
+  const panel = document.getElementById('alert-panel');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) renderAlertList();
+}
+
+function hideBannerAlert() {
+  const el = document.getElementById('banner-alert');
+  el.classList.add('hidden'); el.classList.remove('flex');
+  document.getElementById('alert-dot').classList.add('hidden');
 }
 
 // ══ RESUM DIARI ═══════════════════════════════════════════════════════════
