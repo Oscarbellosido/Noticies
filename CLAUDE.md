@@ -1,6 +1,6 @@
 # Noticies en Català — procediment diari
 
-App de notícies internacionals en català. Frontend `INDEX.html` (servidor propi, https://39699323.servicio-online.net/Noti/INDEX.html)
+App de notícies internacionals en català. Frontend `INDEX.html`: **https://oscarbellosido.github.io/Noticies/INDEX.html** (GitHub Pages des de `master`, repo públic https://github.com/Oscarbellosido/Noticies) i també al servidor propi https://39699323.servicio-online.net/Noti/INDEX.html
 + Cloudflare Worker `worker.js` amb KV `ARTICLES`. Detalls tècnics a `NOTICIES_RESUM.md`.
 
 Des de setembre de 2026 **no es fa servir l'API d'Anthropic** (0 €): els resums els escriu Claude en una tasca
@@ -47,5 +47,5 @@ programada de l'app d'escriptori (~8:00 i ~19:00), i els scripts pugen el result
 - El worker ja no processa res: `?action=fetch` retorna `disabled` i el botó "Actualitzar" només recarrega les dades.
   El cron del worker només fa la revisió mensual de fonts (dia 1, 5h UTC).
 - Estat de l'última publicació: `https://noticies.oscarbellosido.workers.dev/?action=fetchlog`.
-- Canvis a `rss.mjs` o `worker.js` → `npx wrangler deploy`. Canvis a `INDEX.html` → pujar-lo al servidor web (ho fa l'usuari).
+- Canvis a `rss.mjs` o `worker.js` → `npx wrangler deploy`. Canvis a `INDEX.html` → `git push` (publica a GitHub Pages); al servidor propi el puja l'usuari. El repo és PÚBLIC: mai hi posis claus d'API, correus personals ni secrets de wrangler.
 - La carpeta d'usuari `C:\Users\Carles` també és un repo git: aquesta carpeta té el seu propi `.git`. No facis `git add .` fora d'aquí.

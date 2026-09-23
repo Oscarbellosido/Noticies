@@ -1,8 +1,8 @@
-const CACHE_NAME = 'noticies-v2';
+const CACHE_NAME = 'noticies-v3';
 const STATIC_ASSETS = [
-  '/Noti/manifest.json',
-  '/Noti/icon-192.png',
-  '/Noti/icon-512.png'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 const WORKER_ORIGIN = 'noticies.oscarbellosido.workers.dev';
 
@@ -28,9 +28,9 @@ self.addEventListener('push', e => {
   const title = data.title || '🌍 Noticies en Català';
   const options = {
     body: data.body || '',
-    icon: '/Noti/icon-192.png',
-    badge: '/Noti/icon-192.png',
-    data: { url: data.url || '/Noti/INDEX.html', id: data.id || null },
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    data: { url: data.url || './INDEX.html', id: data.id || null },
     tag: data.id || undefined, // evita apilar notificacions repetides del mateix article
   };
   e.waitUntil(self.registration.showNotification(title, options));
@@ -38,7 +38,7 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const targetUrl = (e.notification.data && e.notification.data.url) || '/Noti/INDEX.html';
+  const targetUrl = (e.notification.data && e.notification.data.url) || './INDEX.html';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
       for (const c of clients) {

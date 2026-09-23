@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Noticies en Català</title>
+<script>
+  // GitHub Pages: l'arrel no té index.html (Windows no deixa tenir index.html i INDEX.html alhora)
+  var base = location.pathname.replace(/[^/]*$/, "");
+  location.replace(base.split("/").slice(0, 2).join("/") + "/INDEX.html");
+</script>
+<a href="INDEX.html">Noticies en Català</a>

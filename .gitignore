@@ -2,3 +2,4 @@
 pendents/
 node_modules/
 .claude/worktrees/
+*.docx

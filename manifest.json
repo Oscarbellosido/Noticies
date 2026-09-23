@@ -2,7 +2,7 @@
   "name": "Noticies · en català · IA",
   "short_name": "Noticies",
   "description": "Agregador de notícies internacionals en català amb IA",
-  "start_url": "/Noti/INDEX.html",
+  "start_url": "./INDEX.html",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#3b82f6",
