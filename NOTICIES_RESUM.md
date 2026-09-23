@@ -1,24 +1,40 @@
 # Noticies en Català — Resum Tècnic
 
 ## Descripció
-Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix al català i les resumeix usant IA (Claude). Tot el processament es fa al servidor (Cloudflare Worker), de manera que l'app carrega en <1 segon des de qualsevol dispositiu.
+Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix al català i les resumeix amb Claude.
+El frontend llegeix les dades d'un Cloudflare Worker, de manera que l'app carrega en <1 segon des de qualsevol dispositiu.
+
+> **Canvi de setembre de 2026 — cost 0 €.** Fins al 22/08/2026 el worker processava les notícies amb l'API d'Anthropic
+> (claude-haiku-4-5 via AI Gateway, ~8-10 €/mes) i es va aturar quan es va acabar el crèdit. Ara els resums els escriu
+> Claude dins d'una **tasca programada de l'app d'escriptori** (pla de subscripció), igual que l'app TransVideo.
+> Procediment pas a pas a `CLAUDE.md`.
 
 ---
 
 ## Arquitectura
 
 ```
-[Fonts RSS] → [Cloudflare Worker "noticies"] → [KV Storage]
-                        ↑                            ↓
-               [Cron: 06h, 14h, 20h]         [INDEX.html]
-                        ↑
-               [Claude Haiku 4.5 API]
+PC (tasca programada "noticies-en-catala", 8:00 i 19:00)
+  node scripts/baixa.mjs   → [Fonts RSS] → pendents/lot.json (només articles nous)
+  Claude escriu            → pendents/resultat-NN.json + resum_dia.json
+  node scripts/publica.mjs → wrangler kv key put → [KV ARTICLES] → POST ?action=notify (push)
+                                                        ↓
+                         [Cloudflare Worker "noticies"] (només lectura + favorits/alertes/push)
+                                                        ↓
+                                                  [INDEX.html]
 ```
 
 - **Frontend**: `INDEX.html` — HTML/CSS/JS pur, sense frameworks. Usa Tailwind CDN.
-- **Backend**: Cloudflare Worker (`worker.js`) amb KV Storage.
-- **IA**: Claude Haiku 4.5 via API d'Anthropic.
-- **Dades**: Cloudflare KV (clau `articles`, `fetch_log`, `fetch_lock`, `fetch_debug`).
+- **Backend**: Cloudflare Worker (`worker.js`) amb KV Storage. Ja no crida cap API de pagament.
+- **IA**: Claude a la tasca programada (0 €). Resums de 2-3 línies.
+- **Dades**: Cloudflare KV (`articles`, `fetch_log`, `fetch_debug`, `resum_dia`, `push_subs`, `alert_keywords`,
+  `source_url_overrides`, `source_health_report`).
+
+### Limitacions
+- Només s'actualitza si el PC està encès i l'app de Claude oberta a l'hora programada (si està tancada, la tasca
+  s'executa en tornar-la a obrir).
+- El botó "Actualitzar" de l'app **ja no processa notícies**: només torna a llegir les dades del worker.
+- `wrangler` ha de tenir la sessió iniciada al PC (`npx wrangler login` si caduca).
 
 ---
 
@@ -28,7 +44,12 @@ Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix 
 |--------|-----------|
 | `INDEX.html` | Frontend complet. Es puja al servidor web. |
 | `worker.js` | Cloudflare Worker (backend). Es desplega amb Wrangler. |
-| `wrangler.toml` | Configuració del Worker (nom, KV, cron). |
+| `wrangler.toml` | Configuració del Worker (nom, KV, cron mensual de fonts). |
+| `rss.mjs` | Llista de fonts RSS i parseig, compartit pel worker i `scripts/baixa.mjs`. |
+| `scripts/baixa.mjs` | Baixa l'RSS i deixa els articles nous a `pendents/`. |
+| `scripts/publica.mjs` | Fusiona els resums amb el KV (com l'antic `runFetch`), puja i dispara els push. |
+| `scripts/kv.mjs` | Helpers de wrangler KV. |
+| `CLAUDE.md` | Procediment diari i criteris dels resums (el que llegeix la tasca programada). |
 
 ---
 
@@ -41,68 +62,37 @@ Aplicació web que recopila notícies internacionals de fonts RSS, les tradueix 
 | `news` | GET | Llista articles amb filtres (category, country, search, topic, min_relevance, limit, offset) |
 | `top` | GET | Top N articles més rellevants (últims 2 dies), accepta filtre `country` |
 | `topics` | GET | Top 12 temes trending (últims 2 dies) amb comptador d'articles |
-| `fetch` | GET | Inicia descàrrega i processament en background |
+| `fetch` | GET | **Desactivat**: retorna `{status:'disabled'}` (el processament es fa al PC) |
 | `stats` | GET | Estadístiques (total, per categoria, per país, is_fetching) |
 | `favorite` | POST | Toggle favorit d'un article `{id}` |
 | `favorites` | GET | Llista articles marcats com a favorits |
 | `categories` | GET | Llista de categories disponibles |
 | `countries` | GET | Llista de països disponibles |
-| `debug` | GET | Test: agafa 2 articles RSS i els processa amb Claude |
+| `debug`, `claude` | — | **Desactivats** (410): el worker ja no crida l'API |
+| `resum` | GET | Resum narratiu del dia (clau KV `resum_dia`) |
+| `notify` | POST 🔒 | `{ids}`: envia els avisos push dels articles nous (el crida `publica.mjs`) |
 | `fetchlog` | GET | Log detallat de l'última execució |
 | `clearlock` | GET | Neteja el lock de fetch (útil si es queda encallat) |
 
 ### Cron
-- Horari: `0 4,12,18 * * *` (UTC) = 06h, 14h, 20h hora Madrid
-- Executa `runFetch()` automàticament
+- Només `0 5 1 * *` (UTC, dia 1 de cada mes): revisió de salut de les fonts RSS (`runSourceHealthCheck`), que
+  arregla URLs trencades a `source_url_overrides` i avisa per push.
+- Els antics crons de processament (`0 4,12,18 * * *`) s'han eliminat.
 
-### Flux de `runFetch()`
-1. Descarrega RSS de totes les fonts (`fetchAllRSS`)
-2. Carrega articles existents del KV
-3. Filtra els articles nous (per ID)
-4. Processa en lots de 5 amb Claude (`processWithClaude`)
-5. Desa els articles amb rellevància ≥ 5 al KV
-6. Limita a `MAX_ARTICLES = 500`
+### Processament dels articles (abans `runFetch` + `processWithClaude`, ara al PC)
+1. `baixa.mjs`: descarrega RSS (27 fonts, fins a 8 per font), descarta IDs ja al KV i articles de fa més de 3 dies.
+2. Claude escriu per cada article: `id`, `titular_ca`, `resum_ca`, `categoria`, `rellevancia`, `es_duplicat`,
+   `topic_id`, `angle_editorial`, `angle_position` (criteris a `CLAUDE.md`).
+3. `publica.mjs`: els converteix als camps del frontend (`title_ca`, `summary_ca`, `category`, `relevance`,
+   `is_duplicate`…), els afegeix al KV (també duplicats, per al mapa), compta com a desats els de rellevància ≥ 5,
+   ordena per data i limita a `MAX_ARTICLES = 500`.
+4. Escriu `fetch_log` (`mode: 'local'`) i `fetch_debug`, i crida `?action=notify` per als push.
 
-### `processWithClaude(batch, apiKey)`
-- Envia un lot d'articles a Claude amb títol, descripció i font
-- Claude retorna JSON amb: `id`, `titular_ca`, `resum_ca`, `categoria`, `rellevancia`, `es_duplicat`
-- **Important**: el prompt ha d'incloure explícitament `id` com a camp obligatori, sinó Claude no el retorna i el matching falla
-- Model: `claude-haiku-4-5` (barat i ràpid)
-- max_tokens: 4096
-- **No usar `thinking`** — no compatible amb Haiku
-- **Les crides van via Cloudflare AI Gateway** (`noticies-gw`) — vegeu secció AI Gateway
-- **Fallback `summary_ca`**: si Claude no retorna `resum_ca`, s'usa `raw.description` (descripció original RSS) en lloc de cadena buida — garanteix que la cerca funcioni encara que el resum no estigui traduït
-
-### Cloudflare AI Gateway
-- **Problema**: `api.anthropic.com` està darrera de Cloudflare. Els Workers no poden fer subrequests a hosts Cloudflare-proxied (retorna HTTP 403 "error code: 1000").
-- **Solució**: Cloudflare AI Gateway actua de pont intern. **Gratuït**.
-- Gateway creat: `noticies-gw` (account: `06ae974d240fa2b27e2da3fcd783a8c9`)
-- URL usada: `https://gateway.ai.cloudflare.com/v1/{account_id}/noticies-gw/anthropic/v1/messages`
-- **Autenticació del gateway**: desactivada (no cal token `cf-aig-authorization`)
-- El cost visible al dashboard del Gateway (~$0.15/dia) és el cost de l'API d'Anthropic, no del Gateway.
-
-### `handleFetch()` — execució síncrona
-- S'executa síncronament (`await runFetch(env)`) en lloc de `ctx.waitUntil`
-- Motiu: `ctx.waitUntil` en HTTP handlers tenia problemes de xarxa en aquest worker
-- El cron (`scheduled`) segueix usant `ctx.waitUntil` sense problemes
+> Històric: l'AI Gateway `noticies-gw` i el secret `API_KEY` ja no s'utilitzen.
 
 ### Fonts RSS configurades
 
-| Font | País | Idioma |
-|------|------|--------|
-| BBC News | UK | en |
-| The Guardian | UK | en |
-| Reuters | US | en |
-| AP News | US | en |
-| Le Monde | FR | fr |
-| Le Figaro | FR | fr |
-| DW News | DE | en |
-| Politico EU | EU | en |
-| EUobserver | EU | en |
-| El País | ES | es |
-| La Vanguardia | ES | es |
-| Financial Times | UK | en |
-| ARA | ES | ca |
+27 fonts (BBC, Guardian, Euronews, Sky News, Le Monde, France 24, DW, Politico EU, EUobserver, El País, La Vanguardia, FT, ARA, Al Jazeera, Middle East Eye, NYT, WPost, Der Spiegel, SCMP, VilaWeb, Xataka, The Verge, Ars Technica, Wired, Marca, Mundo Deportivo, BBC Sport). La llista és a `rss.mjs` (`RSS_SOURCES`).
 
 ### Filtre de països (INDEX.html)
 Països disponibles al dropdown:
@@ -144,7 +134,8 @@ Països disponibles al dropdown:
 | `loadBriefing()` | Vista compacta de les 15 més rellevants |
 | `loadFavs()` | Carrega favorits |
 | `loadStats()` | Mostra estadístiques al header |
-| `triggerFetch()` | Crida `?action=fetch` i fa polling cada 5s fins que acaba |
+| `triggerFetch()` | Botó "Actualitzar": només torna a llegir estadístiques i la vista actual |
+| `generarResum()` | Mostra el resum narratiu del dia (`?action=resum`), escrit per la tasca programada |
 | `quickFav(id, btn)` | Toggle favorit via POST al worker |
 | `openModal(id)` | Obre modal amb detall de l'article |
 | `apiGet(params)` | Helper GET al worker |
@@ -185,17 +176,17 @@ Països disponibles al dropdown:
 ### Requisits
 - Compte Cloudflare (pla gratuït suficient)
 - Wrangler CLI: `npm install -g wrangler`
-- Clau API d'Anthropic
 
 ### Passos
 ```bash
 wrangler login
 wrangler kv namespace create ARTICLES   # copia l'ID al wrangler.toml
-wrangler secret put API_KEY             # enganxa la clau Anthropic
+wrangler secret put APP_SECRET          # el mateix valor que APP_SECRET a INDEX.html
+wrangler secret put VAPID_PRIVATE_JWK   # clau privada per als push
 wrangler deploy
 ```
 
-> **Requisit addicional**: crear l'AI Gateway `noticies-gw` al Cloudflare Dashboard → AI → AI Gateway → Create custom gateway (autenticació desactivada).
+> Ja no cal l'AI Gateway ni cap clau d'Anthropic.
 
 ### `wrangler.toml` mínim
 ```toml
@@ -208,14 +199,14 @@ binding = "ARTICLES"
 id = "EL_TEU_KV_ID"
 
 [triggers]
-crons = ["0 4,12,18 * * *"]
+crons = ["0 5 1 * *"]
 ```
 
 ---
 
 ## Cost aproximat
-- **Cloudflare Worker**: gratuït (100k req/dia, 3 crons/dia)
-- **Anthropic Haiku 4.5**: ~$1.50-2/mes (3 runs/dia × ~8 lots × cost mínim)
+- **Cloudflare Worker + KV**: gratuït.
+- **Resums**: 0 € (tasca programada de Claude dins del pla de subscripció). Abans: ~8-10 €/mes d'API.
 - **Servidor web** (INDEX.html): el que ja tens
 
 ---

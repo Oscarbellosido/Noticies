@@ -248,7 +248,7 @@
             class="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700
                    text-white text-sm font-bold rounded-lg transition-colors">
             <span id="ico-resum">✨</span>
-            <span>Generar resum del dia</span>
+            <span>Resum del dia</span>
           </button>
           <button onclick="toggleAudio()" id="btn-audio"
             class="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700
@@ -396,10 +396,10 @@
         <div>
           <p class="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Com funciona</p>
           <ul class="space-y-1.5 list-none">
-            <li class="flex items-start gap-2"><span>🌐</span><span>Agrega notícies de <strong class="text-gray-900 dark:text-gray-100">29 fonts internacionals</strong> (BBC, Reuters, El País, Le Monde, Al Jazeera, Xataka…)</span></li>
-            <li class="flex items-start gap-2"><span>🤖</span><span>La IA (Claude Haiku) processa cada article: el <strong class="text-gray-900 dark:text-gray-100">tradueix al català</strong>, en fa un <strong class="text-gray-900 dark:text-gray-100">resum de 4–6 línies</strong> i li assigna una <strong class="text-gray-900 dark:text-gray-100">puntuació de rellevància</strong> (1–10)</span></li>
+            <li class="flex items-start gap-2"><span>🌐</span><span>Agrega notícies de <strong class="text-gray-900 dark:text-gray-100">27 fonts internacionals</strong> (BBC, The Guardian, El País, Le Monde, Al Jazeera, Xataka…)</span></li>
+            <li class="flex items-start gap-2"><span>🤖</span><span>Claude processa cada article: el <strong class="text-gray-900 dark:text-gray-100">tradueix al català</strong>, en fa un <strong class="text-gray-900 dark:text-gray-100">resum breu</strong> i li assigna una <strong class="text-gray-900 dark:text-gray-100">puntuació de rellevància</strong> (1–10)</span></li>
             <li class="flex items-start gap-2"><span>📊</span><span>Només es mostren articles amb rellevància <strong class="text-gray-900 dark:text-gray-100">≥ 5</strong></span></li>
-            <li class="flex items-start gap-2"><span>🕐</span><span>S'actualitza <strong class="text-gray-900 dark:text-gray-100">3 cops al dia</strong>: 6h, 14h i 20h</span></li>
+            <li class="flex items-start gap-2"><span>🕐</span><span>S'actualitza <strong class="text-gray-900 dark:text-gray-100">2 cops al dia</strong>: cap a les 8h i les 19h</span></li>
           </ul>
         </div>
 
@@ -474,7 +474,7 @@
 const APP_VERSION = '2.3';
 const WORKER_URL = 'https://noticies.oscarbellosido.workers.dev';
 // Ha de coincidir amb el secret APP_SECRET configurat al worker (wrangler secret put APP_SECRET).
-// Només protegeix accions sensibles (claude/fetch/debug/clearlock) de crides externes casuals;
+// Només protegeix accions sensibles (alertes/push/notify/clearlock) de crides externes casuals;
 // no és secret real perquè el codi és visible al navegador.
 const APP_SECRET = 'WoblC75pCoLoNgAC9xB5CmxezIAtRSa-';
 // Clau pública VAPID per a Web Push — ha de coincidir amb VAPID_PUBLIC_KEY a worker.js. No és secreta.
@@ -569,7 +569,7 @@ function closeWelcome() {
 
 // ══ NETEJAR CACHÉ ══════════════════════════════════════════════════════════
 function clearCache() {
-  if (!confirm('Vols tornar a descarregar les notícies?')) return;
+  if (!confirm('Vols tornar a carregar les notícies?')) return;
   S.articles = []; S.topArts = []; S.favArts = [];
   toast('🗑️ Actualitzant...');
   setTimeout(() => triggerFetch(), 500);
@@ -855,7 +855,8 @@ function renderPerspectives(groups) {
 async function loadStats() {
   try {
     const data = await apiGet({ action: 'stats' });
-    document.getElementById('txt-status').textContent = `${data.total_articles || 0} notícies processades`;
+    document.getElementById('txt-status').textContent = `${data.total_articles || 0} notícies processades`
+      + (data.last_fetch?.fetched_at ? ` · actualitzat ${fmtUpdated(data.last_fetch.fetched_at)}` : '');
     const cats = data.by_category || {};
     document.getElementById('txt-stats').innerHTML = Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5)
       .map(([k,v]) => `<span class="flex items-center gap-0.5">${CAT_ICO[k]||'📰'} <span>${v}</span></span>`).join('');
@@ -995,61 +996,34 @@ function stopFetchUI() {
   document.getElementById('ico-fetch').classList.remove('spin');
 }
 
+// Les notícies ja no es processen des d'aquí: les baixa i resumeix el PC dos
+// cops al dia i les puja al worker. El botó només torna a llegir les dades.
 async function triggerFetch() {
-  if (S.isFetching) { toast('⏳ Ja s\'estan obtenint notícies...'); return; }
+  if (S.isFetching) return;
   S.isFetching = true;
   const btn = document.getElementById('btn-fetch');
   btn.disabled = true;
   document.getElementById('ico-fetch').classList.add('spin');
-  toast('🔄 Obtenint notícies al servidor...');
-
-  let poll = null;
-
-  // Timeout dur: 2 minuts i mig
-  const hardTimeout = setTimeout(() => {
-    if (!S.isFetching) return;
-    clearInterval(poll);
-    stopFetchUI();
-    toast('⏳ L\'actualització pot trigar uns minuts, les notícies s\'actualitzaran aviat.');
-    loadTop(); loadStats();
-  }, 150000);
-
   try {
-    const res = await apiGet({ action: 'fetch' });
-    if (res.status === 'already_running') {
-      toast('⏳ Ja s\'estan processant notícies, espera...');
-    } else {
-      toast('⚙️ Processant notícies al servidor... (~2 min)');
-    }
-
-    // Polling fins que acabi (màxim 24 × 5s = 120s, cobert pel hardTimeout)
-    let attempts = 0;
-    poll = setInterval(async () => {
-      attempts++;
-      try {
-        const stats = await apiGet({ action: 'stats' });
-        if (!stats.is_fetching || attempts >= 24) {
-          clearInterval(poll);
-          clearTimeout(hardTimeout);
-          hideBanner();
-          toast(`✅ ${stats.total_articles} notícies disponibles!`);
-          stopFetchUI();
-          loadTop(); loadStats();
-        }
-      } catch {
-        clearInterval(poll);
-        clearTimeout(hardTimeout);
-        stopFetchUI();
-      }
-    }, 5000);
-
+    hideBanner(); hideBannerNova();
+    const stats = await apiGet({ action: 'stats' });
+    await loadStats();
+    setView(S.view);
+    const quan = stats.last_fetch?.fetched_at ? fmtUpdated(stats.last_fetch.fetched_at) : '';
+    toast(`✅ ${stats.total_articles} notícies${quan ? ' · actualitzades ' + quan : ''}`);
   } catch(e) {
-    clearTimeout(hardTimeout);
     console.error('triggerFetch error:', e);
-    showBanner(e.message);
     toast('⚠️ ' + e.message);
+  } finally {
     stopFetchUI();
   }
+}
+
+function fmtUpdated(iso) {
+  const d = new Date(iso);
+  const avui = new Date().toDateString() === d.toDateString();
+  const hora = d.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
+  return avui ? `avui a les ${hora}` : `el ${d.toLocaleDateString('ca-ES', { day: 'numeric', month: 'numeric' })} a les ${hora}`;
 }
 
 // ══ FAVORITS ══════════════════════════════════════════════════════════════
@@ -1785,6 +1759,8 @@ function hideBannerAlert() {
 }
 
 // ══ RESUM DIARI ═══════════════════════════════════════════════════════════
+// El resum narratiu l'escriu Claude a la tasca programada del PC (clau KV
+// resum_dia); aquí només es llegeix.
 async function generarResum() {
   const btn = document.getElementById('btn-resum');
   const ico  = document.getElementById('ico-resum');
@@ -1793,33 +1769,17 @@ async function generarResum() {
 
   btn.disabled = true;
   ico.classList.add('spin');
-  txt.textContent = '';
   box.classList.remove('hidden');
-  txt.textContent = 'Generant resum...';
+  txt.textContent = 'Carregant resum...';
 
   try {
-    const data = await apiGet({ action: 'top', limit: 15 });
-    const arts = data.articles || [];
-    if (!arts.length) { txt.textContent = 'No hi ha notícies per resumir.'; return; }
+    const data = await apiGet({ action: 'resum' });
+    if (!data || !data.text) { txt.textContent = 'Encara no hi ha cap resum del dia.'; return; }
+    txt.textContent = `${data.text}
 
-    const context = arts.map((a, i) =>
-      `${i+1}. [${a.category}] ${a.title_ca}: ${a.summary_ca}`
-    ).join('\n\n');
-
-    const resp = await apiPost({ action: 'claude' }, {
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: `Ets un periodista expert en català. Redacta resums clars i entenedors.`,
-      messages: [{
-        role: 'user',
-        content: `Basant-te en aquestes notícies d'avui, redacta un resum narratiu en català de 3-4 paràgrafs que expliqui què passa al món. Escriu-ho com si fos l'obertura d'un informatiu: directe, clar i amb context. No facis llistes, escriu text corregut.\n\nNotícies:\n${context}`
-      }]
-    });
-
-    const text = (resp.content || []).find(b => b.type === 'text')?.text || '';
-    txt.textContent = text || 'No s\'ha pogut generar el resum.';
+— Resum ${fmtUpdated(data.generat_at)}`;
   } catch(e) {
-    txt.textContent = 'Error en generar el resum: ' + e.message;
+    txt.textContent = 'Error en carregar el resum: ' + e.message;
   } finally {
     btn.disabled = false;
     ico.classList.remove('spin');
