@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#3b82f6"/>
+<link rel="manifest" href="manifest.json"/>
 <title>🌍 Noticies en Català</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
@@ -21,6 +23,7 @@
   .badge { font-size:.65rem; font-weight:700; letter-spacing:.05em; padding:2px 8px; border-radius:999px; }
   .bar   { height:3px; border-radius:2px; background: linear-gradient(90deg,#3b82f6,#8b5cf6); }
   #toast { transition: opacity .3s, transform .3s; }
+  #toast-version { transition: opacity .4s, transform .4s; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 99px; }
   #map { height: 420px; border-radius: 1rem; z-index: 0; }
@@ -29,6 +32,12 @@
   .badge-nova { font-size:.6rem; font-weight:700; background:#16a34a; color:#fff; padding:2px 7px; border-radius:999px; letter-spacing:.04em; white-space:nowrap; }
   .card-read  { opacity: 0.52; }
   .card-read:hover { opacity: 0.8; }
+  @media (hover: hover) {
+    .card { transition: transform 150ms ease, box-shadow 150ms ease; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -4px rgba(0,0,0,.12); }
+  }
+  .view-fade { animation: viewFadeIn 200ms ease both; }
+  @keyframes viewFadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
@@ -101,7 +110,6 @@
       <button onclick="setView('briefing')"     id="btn-briefing"     class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">📋 Briefing</button>
       <button onclick="setView('favs')"         id="btn-favs"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">❤️ Favs</button>
       <button onclick="setView('perspectives')" id="btn-perspectives" class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">🌍 Perspectives</button>
-      <button onclick="setView('chat')"         id="btn-chat"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">💬 Chat</button>
       <button onclick="setView('mapa')"         id="btn-mapa"         class="vbtn px-2.5 py-1.5 rounded text-xs font-semibold">🗺️ Mapa</button>
     </div>
 
@@ -129,6 +137,17 @@
                dark:border-gray-700 rounded-xl shadow-xl z-[100] p-4 w-72">
         <h3 class="font-semibold text-sm mb-0.5">🔔 Alertes de paraules clau</h3>
         <p class="text-xs text-gray-400 mb-3">Rebràs una notificació quan arribin notícies amb aquestes paraules</p>
+
+        <div class="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-gray-600 dark:text-gray-300">Notificacions push</div>
+            <div id="push-status" class="text-[11px] text-gray-400 leading-snug">Comprovant...</div>
+          </div>
+          <button id="btn-push-toggle" onclick="togglePush()"
+            class="flex-shrink-0 px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300
+                   dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800">…</button>
+        </div>
+
         <div class="flex gap-2 mb-3">
           <input id="alert-input" type="text" placeholder="Paraula clau..."
             class="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700
@@ -147,6 +166,10 @@
     <button onclick="toggleDark()" class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">
       <span id="ico-dark">🌙</span>
     </button>
+
+    <button onclick="document.getElementById('modal-info').classList.remove('hidden')"
+            title="Sobre l'app"
+            class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base">ℹ️</button>
   </div>
 
   <!-- Categories -->
@@ -159,6 +182,7 @@
       <button onclick="setCategory('Internacional')" id="cat-Internacional" class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">🌍 Internacional</button>
       <button onclick="setCategory('Societat')"      id="cat-Societat"      class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">👥 Societat</button>
       <button onclick="setCategory('Conflicte')"     id="cat-Conflicte"     class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">⚔️ Conflicte</button>
+      <button onclick="setCategory('Esports')"       id="cat-Esports"       class="catbtn flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border">⚽ Esports</button>
     </div>
   </div>
 </header>
@@ -238,6 +262,22 @@
         </div>
       </div>
 
+      <!-- Temes destacats (topic_id) -->
+      <div id="briefing-temes" class="hidden mb-6">
+        <div class="border-t border-gray-100 dark:border-gray-800 pt-6">
+          <h3 class="font-bold text-base mb-4 text-gray-800 dark:text-gray-100">📌 Temes destacats</h3>
+          <div id="list-temes" class="flex flex-col gap-4"></div>
+        </div>
+      </div>
+
+      <!-- Resum per categories -->
+      <div id="briefing-categories" class="hidden mb-6">
+        <div class="border-t border-gray-100 dark:border-gray-800 pt-6">
+          <h3 class="font-bold text-base mb-4 text-gray-800 dark:text-gray-100">📂 Per categories</h3>
+          <div id="list-categories" class="grid grid-cols-2 gap-3 sm:grid-cols-3"></div>
+        </div>
+      </div>
+
       <div id="list-briefing" class="flex flex-col gap-5"></div>
     </div>
   </div>
@@ -281,38 +321,16 @@
     <div id="list-perspectives" class="flex flex-col gap-8"></div>
   </div>
 
-  <div id="view-chat" class="hidden">
-    <div class="max-w-3xl mx-auto">
-      <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 class="font-bold text-base">💬 Pregunta sobre l'actualitat</h2>
-          <p class="text-xs text-gray-400 mt-0.5">Claude respon basant-se en les notícies d'avui</p>
-        </div>
-
-        <!-- Missatges -->
-        <div id="chat-msgs" class="flex flex-col gap-4 p-4 min-h-[300px] max-h-[50vh] overflow-y-auto">
-          <div class="text-sm text-gray-400 text-center py-8">
-            Fes una pregunta sobre les notícies d'avui.<br>
-            <span class="text-xs">Ex: "Què passa amb Trump i l'Iran?" · "Quines notícies d'economia hi ha?"</span>
-          </div>
-        </div>
-
-        <!-- Input -->
-        <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-          <input id="chat-input" type="text" placeholder="Pregunta sobre les notícies..."
-            class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700
-                   bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarChat(); }"/>
-          <button onclick="enviarChat()" id="btn-chat-send"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-1.5">
-            <span id="ico-chat-send">➤</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
 </main>
+
+<!-- ══ TOAST VERSIÓ ════════════════════════════════════════════════════════ -->
+<div id="toast-version" style="opacity:0;transform:translateY(-10px)"
+  class="fixed top-4 left-1/2 -translate-x-1/2 pointer-events-none z-50
+         bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900
+         text-sm px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
+  ✨ Nova versió instal·lada
+</div>
 
 <!-- ══ TOAST ════════════════════════════════════════════════════════════════ -->
 <div id="toast" style="opacity:0;transform:translateX(-50%) translateY(10px)"
@@ -320,6 +338,101 @@
          bg-gray-900 dark:bg-white text-white dark:text-gray-900
          text-sm px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
   <span id="toast-msg"></span>
+</div>
+
+<!-- ══ MODAL BENVINGUDA ══════════════════════════════════════════════════════ -->
+<div id="modal-welcome" class="hidden fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-900 rounded-2xl max-w-lg w-full shadow-2xl"
+       onclick="event.stopPropagation()">
+    <div class="p-6">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">👋 Benvingut a Noticies</h2>
+      <p class="text-gray-600 dark:text-gray-400 text-[15px] leading-relaxed mb-5">
+        Agregador de notícies internacionals en <strong class="text-gray-800 dark:text-gray-200">català</strong> potenciades per IA.
+        El contingut s'actualitza <strong class="text-gray-800 dark:text-gray-200">3 cops al dia</strong> amb articles resumits i traduïts automàticament de 20 fonts internacionals.
+      </p>
+
+      <div class="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-5">
+        <p class="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3">📲 Com instal·lar l'app</p>
+        <ul class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <li class="flex items-start gap-2">
+            <span class="text-base leading-snug">🤖</span>
+            <span><strong>Android / Chrome / Edge:</strong> Menú <span class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">⋮</span> → <em>"Afegir a la pantalla d'inici"</em></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-base leading-snug">🍎</span>
+            <span><strong>iPhone / Safari:</strong> Compartir <span class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">□↑</span> → <em>"Afegir a la pantalla d'inici"</em></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-base leading-snug">🖥️</span>
+            <span><strong>PC / Edge / Chrome:</strong> Icona d'instal·lar a la barra d'adreces</span>
+          </li>
+        </ul>
+      </div>
+
+      <button onclick="closeWelcome()"
+        class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+               text-white font-semibold rounded-xl transition-colors text-[15px]">
+        Entesos
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL INFO ═══════════════════════════════════════════════════════════ -->
+<div id="modal-info" class="hidden fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
+     onclick="document.getElementById('modal-info').classList.add('hidden')">
+  <div class="bg-white dark:bg-gray-900 rounded-2xl max-w-lg w-full shadow-2xl max-h-[85vh] flex flex-col"
+       onclick="event.stopPropagation()">
+    <div class="p-6 overflow-y-auto">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">📰 Noticies — Com funciona</h2>
+        <button onclick="document.getElementById('modal-info').classList.add('hidden')"
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg
+                 hover:bg-gray-100 dark:hover:bg-gray-800 flex-shrink-0 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="space-y-4 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+
+        <div>
+          <p class="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Com funciona</p>
+          <ul class="space-y-1.5 list-none">
+            <li class="flex items-start gap-2"><span>🌐</span><span>Agrega notícies de <strong class="text-gray-900 dark:text-gray-100">29 fonts internacionals</strong> (BBC, Reuters, El País, Le Monde, Al Jazeera, Xataka…)</span></li>
+            <li class="flex items-start gap-2"><span>🤖</span><span>La IA (Claude Haiku) processa cada article: el <strong class="text-gray-900 dark:text-gray-100">tradueix al català</strong>, en fa un <strong class="text-gray-900 dark:text-gray-100">resum de 4–6 línies</strong> i li assigna una <strong class="text-gray-900 dark:text-gray-100">puntuació de rellevància</strong> (1–10)</span></li>
+            <li class="flex items-start gap-2"><span>📊</span><span>Només es mostren articles amb rellevància <strong class="text-gray-900 dark:text-gray-100">≥ 5</strong></span></li>
+            <li class="flex items-start gap-2"><span>🕐</span><span>S'actualitza <strong class="text-gray-900 dark:text-gray-100">3 cops al dia</strong>: 6h, 14h i 20h</span></li>
+          </ul>
+        </div>
+
+        <div class="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-4">
+          <p class="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Les pestanyes</p>
+          <ul class="space-y-1">
+            <li><span class="font-mono">⭐ Top</span> — les notícies més rellevants i recents</li>
+            <li><span class="font-mono">📰 Totes</span> — totes les notícies per data</li>
+            <li><span class="font-mono">📋 Briefing</span> — resum intel·ligent del dia agrupat per temes</li>
+            <li><span class="font-mono">❤️ Favs</span> — articles que has guardat</li>
+            <li><span class="font-mono">🌍 Perspectives</span> — la mateixa notícia vista des de diverses fonts</li>
+            <li><span class="font-mono">🗺️ Mapa</span> — notícies situades geogràficament</li>
+          </ul>
+        </div>
+
+        <div>
+          <p class="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Consells</p>
+          <ul class="space-y-1.5 list-none">
+            <li class="flex items-start gap-2"><span>🔍</span><span>Filtra per <strong class="text-gray-900 dark:text-gray-100">categoria</strong> (Política, Esports, Tecnologia…) o per <strong class="text-gray-900 dark:text-gray-100">país</strong></span></li>
+            <li class="flex items-start gap-2"><span>🔊</span><span>Prem el botó <strong class="text-gray-900 dark:text-gray-100">🔊</strong> per escoltar les notícies en veu alta</span></li>
+            <li class="flex items-start gap-2"><span>📲</span><span>Instal·la l'app al mòbil: a Safari prem <em>"Compartir → Afegir a l'inici"</em>; a Chrome/Edge prem la icona d'instal·lació</span></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <button onclick="document.getElementById('modal-info').classList.add('hidden')"
+        class="mt-5 w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+               text-white font-semibold rounded-xl transition-colors text-[15px]">
+        Tancar
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ MODAL ════════════════════════════════════════════════════════════════ -->
@@ -345,7 +458,11 @@
         <button id="modal-fav-btn" onclick="favFromModal()"
           class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-semibold
                  rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-          ❤️ Desar com a favorit
+          ❤️ Desar com a favorit</button>
+        <button onclick="shareArticle(S.modalId)"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-semibold
+                 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          🔗 Compartir
         </button>
       </div>
     </div>
@@ -354,13 +471,20 @@
 
 <script>
 // ══ CONFIG ════════════════════════════════════════════════════════════════
+const APP_VERSION = '2.3';
 const WORKER_URL = 'https://noticies.oscarbellosido.workers.dev';
+// Ha de coincidir amb el secret APP_SECRET configurat al worker (wrangler secret put APP_SECRET).
+// Només protegeix accions sensibles (claude/fetch/debug/clearlock) de crides externes casuals;
+// no és secret real perquè el codi és visible al navegador.
+const APP_SECRET = 'WoblC75pCoLoNgAC9xB5CmxezIAtRSa-';
+// Clau pública VAPID per a Web Push — ha de coincidir amb VAPID_PUBLIC_KEY a worker.js. No és secreta.
+const VAPID_PUBLIC_KEY = 'BM2P6l00GxYKXUEgPR7z4SQJaO8efBhJIfiIYXlGRfmert28xqmd8EQxGbjLL-TEOPnZLO-T4wU3vW4_t0x7aZQ';
 
 // ── API helpers ────────────────────────────────────────────────────────────
 async function apiGet(params = {}) {
   const url = new URL(WORKER_URL);
   Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && url.searchParams.set(k, v));
-  const r = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
+  const r = await fetch(url.toString(), { headers: { 'X-App-Secret': APP_SECRET }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`Error ${r.status}`);
   return r.json();
 }
@@ -370,7 +494,7 @@ async function apiPost(params = {}, body = {}) {
   Object.entries(params).forEach(([k, v]) => v !== '' && v !== undefined && url.searchParams.set(k, v));
   const r = await fetch(url.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-App-Secret': APP_SECRET },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
@@ -385,8 +509,9 @@ const CAT_COL = {
   'Internacional':'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   'Societat':     'bg-pink-100   text-pink-800   dark:bg-pink-900/40   dark:text-pink-300',
   'Conflicte':    'bg-red-100    text-red-800    dark:bg-red-900/40    dark:text-red-300',
+  'Esports':      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
 };
-const CAT_ICO = { Política:'🏛️', Economia:'📈', Tecnologia:'💻', Internacional:'🌍', Societat:'👥', Conflicte:'⚔️' };
+const CAT_ICO = { Política:'🏛️', Economia:'📈', Tecnologia:'💻', Internacional:'🌍', Societat:'👥', Conflicte:'⚔️', Esports:'⚽' };
 const FLAGS   = { UK:'🇬🇧', US:'🇺🇸', FR:'🇫🇷', DE:'🇩🇪', EU:'🇪🇺', ES:'🇪🇸', QA:'🇶🇦', ME:'🌍', HK:'🇭🇰', CA:'🏴󠁥󠁳󠁣󠁴󠁿' };
 function countryFlag(country) {
   const c = COUNTRY_LIST.find(x => x.v === country);
@@ -401,6 +526,16 @@ const S = {
 
 // ══ INIT ══════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
+  // Comprovació de nova versió
+  if (localStorage.getItem('app_version') !== APP_VERSION) {
+    localStorage.setItem('app_version', APP_VERSION);
+    const tv = document.getElementById('toast-version');
+    tv.style.opacity = '1'; tv.style.transform = 'translateX(-50%) translateY(0)';
+    setTimeout(() => {
+      tv.style.opacity = '0'; tv.style.transform = 'translateX(-50%) translateY(-10px)';
+    }, 4000);
+  }
+
   S.dark     = localStorage.getItem('dark')     === '1';
   S.category = localStorage.getItem('category') || '';
   S.country  = localStorage.getItem('country')  || '';
@@ -419,7 +554,18 @@ window.addEventListener('DOMContentLoaded', () => {
   showLoad(true);
   loadTop();
   loadStats();
+
+  if (!localStorage.getItem('app_welcomed')) showWelcome();
 });
+
+// ══ MODAL BENVINGUDA ══════════════════════════════════════════════════════
+function showWelcome() {
+  document.getElementById('modal-welcome').classList.remove('hidden');
+}
+function closeWelcome() {
+  localStorage.setItem('app_welcomed', 'true');
+  document.getElementById('modal-welcome').classList.add('hidden');
+}
 
 // ══ NETEJAR CACHÉ ══════════════════════════════════════════════════════════
 function clearCache() {
@@ -431,12 +577,15 @@ function clearCache() {
 
 // ══ VISTES ════════════════════════════════════════════════════════════════
 function showView(v) {
-  ['top','all','briefing','favs','perspectives','chat','mapa'].forEach(x =>
+  ['top','all','briefing','favs','perspectives','mapa'].forEach(x =>
     document.getElementById(`view-${x}`).classList.add('hidden')
   );
-  document.getElementById(`view-${v}`).classList.remove('hidden');
+  const panel = document.getElementById(`view-${v}`);
+  panel.classList.remove('hidden', 'view-fade');
+  void panel.offsetWidth;
+  panel.classList.add('view-fade');
   document.getElementById('cat-wrap').style.display =
-    (v === 'briefing' || v === 'favs' || v === 'perspectives' || v === 'chat' || v === 'mapa') ? 'none' : '';
+    (v === 'briefing' || v === 'favs' || v === 'perspectives' || v === 'mapa') ? 'none' : '';
 }
 
 async function setView(v) {
@@ -449,7 +598,6 @@ async function setView(v) {
   else if (v === 'briefing')     loadBriefing();
   else if (v === 'favs')         loadFavs();
   else if (v === 'perspectives') loadPerspectives();
-  else if (v === 'chat')         { showLoad(false); initChat(); setTimeout(() => document.getElementById('chat-input').focus(), 100); }
   else if (v === 'mapa')         { showLoad(false); setTimeout(() => initMapa(), 100); }
 }
 
@@ -494,6 +642,7 @@ async function loadAll(append = false) {
     });
     const page = data.articles || [];
     S.articles = append ? [...S.articles, ...page] : page;
+    S.articles.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
     render('list-all', S.articles);
     document.getElementById('btn-more').classList.toggle('hidden', (data.total || 0) <= S.offset + S.limit);
     if (!S.articles.length) showEmpty('📭', 'Cap notícia trobada', 'Prova uns altres filtres o actualitza.');
@@ -549,11 +698,106 @@ function humanizeTopic(id) {
   return (id || '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// ── Espectre editorial ──────────────────────────────────────────────────────
+// Claude ja calcula angle_position (-1 progressista .. +1 conservador) per
+// article. És la font de veritat: fiable perquè és un número, no text lliure.
+// Per articles antics (processats abans d'aquest camp) fem servir una
+// heurística de paraules clau com a alternativa; si no encaixa amb cap, NO
+// l'assignem al centre (aixo amagava l'espectre real) — el deixem fora de
+// l'espectre i només es mostra com a etiqueta.
+const ANGLE_FALLBACK = [
+  { kw: ['progressista', 'esquerra', 'izquierda'],  pos: -1 },
+  { kw: ['liberal'],                                pos: -0.35 },
+  { kw: ['neutral', 'objectiu', 'independent'],     pos: 0 },
+  { kw: ['conservador', 'dreta', 'derecha'],        pos: 1 },
+  { kw: ['sensacionalista', 'tabloide', 'groc'],    pos: null, color: '#7c3aed' },
+  { kw: ['esportiu'],                               pos: null, color: '#059669' },
+];
+
+function posToColor(pos) {
+  const t = Math.max(-1, Math.min(1, pos));
+  const lerp = (c1, c2, f) => c1.map((v, i) => Math.round(v + (c2[i] - v) * f));
+  const rgb = t < 0 ? lerp([225,29,72], [148,163,184], t + 1) : lerp([148,163,184], [37,99,235], t);
+  return `rgb(${rgb.join(',')})`;
+}
+
+function angleInfo(a) {
+  const text = a.angle_editorial;
+  if (typeof a.angle_position === 'number') {
+    const label = text || (a.angle_position < -0.15 ? 'progressista' : a.angle_position > 0.15 ? 'conservador' : 'neutral');
+    return { label, pos: a.angle_position, color: posToColor(a.angle_position) };
+  }
+  if (!text) return null;
+  const t = text.toLowerCase();
+  for (const entry of ANGLE_FALLBACK) {
+    if (entry.kw.some(k => t.includes(k))) {
+      return { label: text, pos: entry.pos, color: entry.pos !== null ? posToColor(entry.pos) : entry.color };
+    }
+  }
+  return { label: text, pos: null, color: '#64748b' }; // angle desconegut: etiqueta sí, espectre no
+}
+
+function renderSpectrum(articles) {
+  const points = articles
+    .map(a => ({ a, info: angleInfo(a) }))
+    .filter(x => x.info && x.info.pos !== null);
+  if (points.length < 2) return '';
+
+  // Agrupa punts amb posicions properes (ex: diverses fonts "neutral") perquè
+  // no quedin tots exactament superposats i s'apilin verticalment en comptes.
+  const sorted = [...points].sort((a, b) => a.info.pos - b.info.pos);
+  const THRESH = 0.12;
+  const buckets = [];
+  for (const pt of sorted) {
+    const last = buckets[buckets.length - 1];
+    if (last && Math.abs(last.pos - pt.info.pos) < THRESH) last.items.push(pt);
+    else buckets.push({ pos: pt.info.pos, items: [pt] });
+  }
+  const rowGap    = 15; // px entre marcadors apilats dins d'un mateix bucket
+  const maxCount  = Math.max(...buckets.map(b => b.items.length));
+  const barHeight = 24 + (maxCount - 1) * rowGap;
+
+  const markers = buckets.flatMap(b => {
+    const left = ((b.pos + 1) / 2) * 100;
+    const n = b.items.length;
+    return b.items.map(({ a, info }, i) => {
+      const dy = (i - (n - 1) / 2) * rowGap;
+      const fl = countryFlag(a.country);
+      return `<button onclick="openModal('${esc(a.id)}')" title="${esc(a.source)} — ${esc(info.label)}"
+        class="absolute w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 shadow
+               flex items-center justify-center text-[11px] leading-none
+               hover:scale-125 hover:z-10 transition-transform"
+        style="left:${left}%; top:calc(50% + ${dy}px); transform:translate(-50%,-50%); background:${info.color}">${fl}</button>`;
+    });
+  }).join('');
+
+  return `
+  <div class="mb-3">
+    <div class="flex justify-between text-[10px] font-medium text-gray-400 mb-1.5 px-0.5">
+      <span>◀ Progressista</span><span>Conservador ▶</span>
+    </div>
+    <div class="relative" style="height:${barHeight}px">
+      <div class="absolute top-1/2 left-0 right-0 h-1.5 -translate-y-1/2 rounded-full"
+           style="background:linear-gradient(to right,#e11d48,#94a3b8,#2563eb)"></div>
+      ${markers}
+    </div>
+  </div>`;
+}
+
 function renderPerspectives(groups) {
   const el = document.getElementById('list-perspectives');
   if (!groups.length) { el.innerHTML = ''; return; }
 
-  el.innerHTML = groups.map(g => {
+  // Ordenar per diversitat de països (més primers)
+  groups.sort((a, b) => {
+    const aCountries = new Set(a.articles.map(x => x.country)).size;
+    const bCountries = new Set(b.articles.map(x => x.country)).size;
+    return bCountries - aCountries;
+  });
+
+  const filteredGroups = groups.filter(g => new Set(g.articles.map(a => a.source)).size >= 2);
+
+  el.innerHTML = filteredGroups.map(g => {
     const label = humanizeTopic(g.topic_id);
     const cards = g.articles.map(a => {
       const fl  = countryFlag(a.country);
@@ -570,6 +814,9 @@ function renderPerspectives(groups) {
           <div class="min-w-0">
             <div class="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">${esc(a.source)}</div>
             <span class="badge ${cc} mt-0.5 inline-block">${ci} ${esc(a.category)}</span>
+            ${a.angle_editorial ? (() => { const ai = angleInfo(a);
+              return `<span class="inline-block mt-1 text-[10px] font-medium text-white px-1.5 py-0.5 rounded" style="background:${ai.color}">${esc(ai.label)}</span>`;
+            })() : ''}
           </div>
         </div>
         <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug line-clamp-3">${esc(a.title_ca || a.title)}</h4>
@@ -577,14 +824,29 @@ function renderPerspectives(groups) {
       </div>`;
     }).join('');
 
+    const flags = [...new Set(g.articles.map(a => countryFlag(a.country)))].join(' ');
     const srcCount = new Set(g.articles.map(a => a.source)).size;
+
+    const times = g.articles.map(a => new Date(a.published_at)).filter(d => !isNaN(d));
+    let timeRange = '';
+    if (times.length >= 2) {
+      const oldest = Math.min(...times.map(d => d.getTime()));
+      const newest = Math.max(...times.map(d => d.getTime()));
+      const oldH = Math.round((Date.now() - oldest) / 3600000);
+      const newH = Math.round((Date.now() - newest) / 3600000);
+      if (oldH !== newH) timeRange = `<span class="text-xs text-gray-400">fa ${oldH}h–${newH}h</span>`;
+      else timeRange = `<span class="text-xs text-gray-400">fa ${newH}h</span>`;
+    }
+
     return `
     <div>
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
         <h3 class="font-bold text-gray-800 dark:text-gray-100">${esc(label)}</h3>
-        <span class="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300
-                     px-2 py-0.5 rounded-full font-semibold">${srcCount} fonts</span>
+        <span class="text-base">${flags}</span>
+        <span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">${srcCount} fonts</span>
+        ${timeRange}
       </div>
+      ${renderSpectrum(g.articles)}
       <div class="flex gap-3 overflow-x-auto pb-2">${cards}</div>
     </div>`;
   }).join('');
@@ -804,6 +1066,24 @@ async function quickFav(id, btn) {
   } catch(e) { toast('Error en desar el favorit'); }
 }
 
+// ══ COMPARTIR ═════════════════════════════════════════════════════════════
+async function shareArticle(id) {
+  const a = allArts().find(x => x.id === id);
+  if (!a) return;
+  const title = a.title_ca || a.title;
+  const shareData = { title, text: a.summary_ca || '', url: a.url };
+  if (navigator.share) {
+    try { await navigator.share(shareData); } catch (e) { /* usuari ha cancel·lat */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(`${title}\n${a.url}`);
+    toast('🔗 Enllaç copiat al porta-retalls');
+  } catch (e) {
+    toast('No s\'ha pogut copiar l\'enllaç');
+  }
+}
+
 // ══ MODAL ═════════════════════════════════════════════════════════════════
 function openModal(id) {
   S.modalId = id;
@@ -870,10 +1150,10 @@ function card(a) {
           <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
             <span class="badge ${cc}">${ci} ${esc(a.category)}</span>
             ${isNova ? '<span class="badge-nova">🆕 Nova</span>' : ''}
-            <span class="text-xs text-gray-400">${fl} ${esc(a.source)}</span>
-            ${dt ? `<span class="text-xs text-gray-400">· ${dt}</span>` : ''}
+            <span class="text-[11px] text-gray-500 dark:text-gray-500">${fl} ${esc(a.source)}</span>
+            ${dt ? `<span class="text-[11px] text-gray-500 dark:text-gray-500">· ${dt}</span>` : ''}
           </div>
-          <h3 class="font-semibold text-gray-900 dark:text-gray-100 leading-snug
+          <h3 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 leading-snug
                      group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
             ${esc(a.title_ca||a.title)}
           </h3>
@@ -881,14 +1161,20 @@ function card(a) {
             <div class="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-[3px]">
               <div class="bar" style="width:${pct}%"></div>
             </div>
-            <span class="text-xs text-gray-400 flex-shrink-0">Rel. ${a.relevance}/10</span>
+            <span class="text-[11px] text-gray-500 flex-shrink-0">Rel. ${a.relevance}/10</span>
           </div>
         </div>
+        ${a.image_url ? `<img src="${escA(a.image_url)}" alt="" loading="lazy"
+          style="width:80px;height:80px;border-radius:8px;object-fit:cover;flex-shrink:0;align-self:flex-start"
+          onerror="this.style.display='none'">` : ''}
+        <button onclick="event.stopPropagation(); shareArticle('${esc(a.id)}')"
+          class="text-lg flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800
+                 hover:scale-110 transition-transform leading-none">🔗</button>
         <button onclick="event.stopPropagation(); quickFav('${esc(a.id)}', this)"
           class="text-xl flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800
                  hover:scale-110 transition-transform leading-none">${fav}</button>
       </div>
-      ${a.summary_ca ? `<p class="mt-2.5 text-sm text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">${esc(a.summary_ca)}</p>` : ''}
+      ${a.summary_ca ? `<p class="mt-2.5 text-[13px] text-gray-500 dark:text-gray-400 leading-[1.65] line-clamp-2">${esc(a.summary_ca)}</p>` : ''}
     </div>
   </div>`;
 }
@@ -911,13 +1197,107 @@ function renderBriefing(arts) {
         </div>
         <h3 class="font-semibold leading-snug mb-1.5">${esc(a.title_ca||a.title)}</h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">${esc(a.summary_ca||'')}</p>
-        <a href="${escA(a.url)}" target="_blank" rel="noopener"
-           class="inline-block mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-          Font: ${esc(a.source)} ↗
-        </a>
+        <div class="flex items-center gap-3 mt-2">
+          <a href="${escA(a.url)}" target="_blank" rel="noopener"
+             class="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+            Font: ${esc(a.source)} ↗
+          </a>
+          <button onclick="shareArticle('${esc(a.id)}')"
+            class="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
+            🔗 Compartir
+          </button>
+        </div>
       </div>
     </div>`;
   }).join('');
+
+  renderBriefingTemes(arts);
+  renderBriefingCategories(arts);
+}
+
+function renderBriefingTemes(arts) {
+  // Agrupa per topic_id, mostra grups amb 2+ articles
+  const groups = {};
+  arts.forEach(a => {
+    if (!a.topic_id) return;
+    if (!groups[a.topic_id]) groups[a.topic_id] = [];
+    groups[a.topic_id].push(a);
+  });
+  const relevant = Object.values(groups).filter(g => g.length >= 2);
+
+  const wrap = document.getElementById('briefing-temes');
+  const list = document.getElementById('list-temes');
+  if (!relevant.length) { wrap.classList.add('hidden'); return; }
+
+  list.innerHTML = relevant.map(g => {
+    const first = g[0];
+    const rest  = g.slice(1);
+    const cc    = CAT_COL[first.category] || 'bg-gray-100 text-gray-600';
+    const ci    = CAT_ICO[first.category] || '📰';
+    return `
+    <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+      <div class="flex items-start gap-2 mb-2">
+        <span class="badge ${cc} flex-shrink-0 mt-0.5">${ci} ${esc(first.category)}</span>
+        <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100 leading-snug">
+          ${esc(first.title_ca || first.title)}
+        </h4>
+      </div>
+      <ul class="flex flex-col gap-1.5 pl-1">
+        ${rest.map(a => {
+          const fl = countryFlag(a.country);
+          return `<li class="flex items-baseline gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+            <span class="flex-shrink-0 text-gray-300 dark:text-gray-600 leading-none">·</span>
+            <span class="flex items-center gap-1 flex-wrap">
+              <span>${fl}</span>
+              <a href="${escA(a.url)}" target="_blank" rel="noopener"
+                 class="hover:text-blue-600 dark:hover:text-blue-400 hover:underline leading-snug">
+                ${esc(a.title_ca || a.title)}
+              </a>
+            </span>
+          </li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }).join('');
+
+  wrap.classList.remove('hidden');
+}
+
+function renderBriefingCategories(arts) {
+  const byCat = {};
+  arts.forEach(a => {
+    if (!a.category) return;
+    if (!byCat[a.category]) byCat[a.category] = [];
+    byCat[a.category].push(a);
+  });
+  const cats = Object.entries(byCat).sort((a, b) => b[1].length - a[1].length);
+
+  const wrap = document.getElementById('briefing-categories');
+  const list = document.getElementById('list-categories');
+  if (!cats.length) { wrap.classList.add('hidden'); return; }
+
+  list.innerHTML = cats.map(([cat, catArts]) => {
+    const cc  = CAT_COL[cat] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
+    const ico = CAT_ICO[cat] || '📰';
+    const top2 = catArts.slice(0, 2);
+    return `
+    <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3.5">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-base leading-none">${ico}</span>
+        <span class="font-semibold text-sm text-gray-800 dark:text-gray-200 flex-1">${esc(cat)}</span>
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full ${cc}">${catArts.length}</span>
+      </div>
+      <ul class="flex flex-col gap-1">
+        ${top2.map(a => `
+        <li class="text-xs text-gray-500 dark:text-gray-400 leading-snug flex gap-1">
+          <span class="flex-shrink-0 text-gray-300 dark:text-gray-600">·</span>
+          <span class="line-clamp-2">${esc(a.title_ca || a.title)}</span>
+        </li>`).join('')}
+      </ul>
+    </div>`;
+  }).join('');
+
+  wrap.classList.remove('hidden');
 }
 
 // ══ DARK MODE ═════════════════════════════════════════════════════════════
@@ -1157,6 +1537,7 @@ const CAT_COLOR = {
   'Tecnologia':   '#a855f7',
   'Societat':     '#ec4899',
   'Internacional':'#f97316',
+  'Esports':      '#eab308',
 };
 
 async function initMapa() {
@@ -1234,83 +1615,6 @@ function mostrarNoticiesPais(codi, nom, noticies) {
   }).join('');
 }
 
-// ══ CHAT ══════════════════════════════════════════════════════════════════
-const chatHistory = [];
-let chatContext = null; // es carrega una sola vegada per sessió
-
-async function initChat() {
-  if (chatContext) return; // ja carregat
-  try {
-    const data = await apiGet({ action: 'top', limit: 8 });
-    const arts = data.articles || [];
-    chatContext = arts.map((a, i) =>
-      `${i+1}. [${a.category}] ${a.title_ca}: ${(a.summary_ca||'').slice(0, 200)}`
-    ).join('\n\n');
-  } catch { chatContext = ''; }
-}
-
-async function enviarChat() {
-  const input = document.getElementById('chat-input');
-  const q = input.value.trim();
-  if (!q) return;
-
-  const btn = document.getElementById('btn-chat-send');
-  btn.disabled = true;
-  document.getElementById('ico-chat-send').textContent = '⏳';
-  input.value = '';
-
-  afegirMissatge('user', q);
-  const typing = afegirMissatge('assistant', '...');
-
-  try {
-    await initChat(); // no-op si ja carregat
-
-    chatHistory.push({ role: 'user', content: q });
-
-    const resp = await apiPost({ action: 'claude' }, {
-      model: 'claude-haiku-4-5',
-      max_tokens: 512,
-      system: `Ets un assistent periodístic. Respon en català, breu i clar, basant-te en les notícies disponibles.\n\nNotícies d'avui:\n${chatContext}`,
-      messages: chatHistory,
-    });
-
-    const text = (resp.content || []).find(b => b.type === 'text')?.text || 'No he pogut obtenir resposta.';
-    typing.textContent = text;
-    chatHistory.push({ role: 'assistant', content: text });
-
-  } catch(e) {
-    typing.textContent = 'Error: ' + e.message;
-    chatHistory.pop();
-  } finally {
-    btn.disabled = false;
-    document.getElementById('ico-chat-send').textContent = '➤';
-  }
-}
-
-function afegirMissatge(rol, text) {
-  const msgs = document.getElementById('chat-msgs');
-
-  // Esborra el missatge inicial si existeix
-  const placeholder = msgs.querySelector('.text-center');
-  if (placeholder) placeholder.remove();
-
-  const isUser = rol === 'user';
-  const div = document.createElement('div');
-  div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
-  div.innerHTML = `
-    <div class="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed
-      ${isUser
-        ? 'bg-blue-600 text-white rounded-br-sm'
-        : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-sm'}">
-      <span style="white-space:pre-wrap">${esc(text)}</span>
-    </div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-
-  // Retorna referència al span per actualitzar-lo
-  return div.querySelector('span');
-}
-
 // ══ ARTICLES LLEGITS (localStorage, zero cost) ════════════════════════════
 const READ_KEY = 'noticies_read';
 let _readIds = null;
@@ -1345,7 +1649,12 @@ function getAlerts() {
   catch { return []; }
 }
 
-function saveAlerts(arr) { localStorage.setItem(ALERTS_KEY, JSON.stringify(arr)); }
+function saveAlerts(arr) {
+  localStorage.setItem(ALERTS_KEY, JSON.stringify(arr));
+  // Sincronitza amb el worker perquè el cron pugui disparar notificacions push
+  // encara que l'app estigui tancada (localStorage només és visible al navegador).
+  apiPost({ action: 'alerts' }, { keywords: arr }).catch(() => {});
+}
 
 function addAlert() {
   const inp = document.getElementById('alert-input');
@@ -1363,6 +1672,85 @@ function addAlert() {
 function removeAlert(kw) {
   saveAlerts(getAlerts().filter(a => a !== kw));
   renderAlertList();
+}
+
+// ══ NOTIFICACIONS PUSH ══════════════════════════════════════════════════════
+function urlBase64ToUint8Array(base64url) {
+  const padding = '='.repeat((4 - base64url.length % 4) % 4);
+  const base64  = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+async function getPushSubscription() {
+  if (!pushSupported()) return null;
+  // navigator.serviceWorker.ready no es resol mai si el registre ha fallat
+  // (origen no segur, SW desactivat...); evitem que la UI es quedi penjada.
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+  const reg = await Promise.race([navigator.serviceWorker.ready, timeout]);
+  return reg.pushManager.getSubscription();
+}
+
+async function refreshPushUI() {
+  const btn = document.getElementById('btn-push-toggle');
+  const status = document.getElementById('push-status');
+  if (!btn || !status) return;
+  if (!pushSupported()) {
+    btn.disabled = true; btn.textContent = 'No disponible';
+    status.textContent = 'Aquest navegador no admet notificacions push';
+    return;
+  }
+  btn.disabled = false;
+  let sub;
+  try {
+    sub = await getPushSubscription();
+  } catch {
+    btn.disabled = true; btn.textContent = 'No disponible';
+    status.textContent = 'El service worker no s\'ha pogut activar en aquest origen';
+    return;
+  }
+  if (sub) {
+    btn.textContent = 'Desactivar';
+    status.textContent = '✅ Activades en aquest dispositiu';
+  } else {
+    btn.textContent = 'Activar';
+    status.textContent = 'Avisa quan surti una notícia molt rellevant o amb una paraula clau';
+  }
+}
+
+async function togglePush() {
+  const btn = document.getElementById('btn-push-toggle');
+  if (!pushSupported()) return;
+  btn.disabled = true;
+  try {
+    const existing = await getPushSubscription();
+    if (existing) {
+      await apiPost({ action: 'push_unsubscribe' }, { endpoint: existing.endpoint });
+      await existing.unsubscribe();
+      toast('🔕 Notificacions desactivades');
+    } else {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Cal donar permís de notificacions al navegador'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      await apiPost({ action: 'push_subscribe' }, sub.toJSON());
+      toast('🔔 Notificacions activades');
+    }
+  } catch (e) {
+    toast('Error amb les notificacions: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    refreshPushUI();
+  }
 }
 
 function renderAlertList() {
@@ -1387,7 +1775,7 @@ function renderAlertList() {
 function toggleAlertPanel() {
   const panel = document.getElementById('alert-panel');
   panel.classList.toggle('hidden');
-  if (!panel.classList.contains('hidden')) renderAlertList();
+  if (!panel.classList.contains('hidden')) { renderAlertList(); refreshPushUI(); }
 }
 
 function hideBannerAlert() {
@@ -1437,6 +1825,13 @@ async function generarResum() {
     ico.classList.remove('spin');
   }
 }
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "f5d642c025a04c17bb20bfdad2f6d88c"}'></script>
 </body>
 </html>

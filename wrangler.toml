@@ -7,4 +7,5 @@ binding = "ARTICLES"
 id = "4ebfd4a5db474ab9b7cb42bf3cb9f5e7"
 
 [triggers]
-crons = ["0 4,12,18 * * *"]
+crons = ["0 4,12,18 * * *", "0 5 1 * *"]
+# El segon cron (5h UTC, dia 1 de cada mes) revisa la salut de les fonts RSS
