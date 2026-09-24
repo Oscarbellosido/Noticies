@@ -217,7 +217,7 @@
   </div>
 
   <div id="view-top" class="hidden">
-    <h2 class="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">⭐ Top 10 Notícies del Dia</h2>
+    <h2 class="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">⭐ Top 10 Notícies del Dia<span id="top-cat"></span></h2>
     <div id="list-top" class="flex flex-col gap-3"></div>
   </div>
 
@@ -623,9 +623,18 @@ function updateViewButtons(active) {
 }
 
 // ══ CÀRREGA DES DEL WORKER ════════════════════════════════════════════════
+// El Top respecta la categoria i el país triats. Amb categoria es fa servir
+// 'news' (mateixa ordenació rellevància + frescor) perquè 'top' no filtra per categoria.
+function fetchTop() {
+  return S.category
+    ? apiGet({ action: 'news', limit: 10, category: S.category, country: S.country })
+    : apiGet({ action: 'top', limit: 10, country: S.country });
+}
+
 async function loadTop() {
+  document.getElementById('top-cat').textContent = S.category ? ` · ${S.category}` : '';
   try {
-    const data = await apiGet({ action: 'top', limit: 10, country: S.country });
+    const data = await fetchTop();
     S.topArts = data.articles || [];
     render('list-top', S.topArts);
     if (!S.topArts.length) showEmpty('📭', 'Cap notícia disponible',
@@ -903,6 +912,7 @@ function setCategory(cat) {
   localStorage.setItem('category', cat);
   updateCatButtons(cat);
   if (S.view === 'all') { S.offset = 0; showLoad(true); hideEmpty(); loadAll(); }
+  else if (S.view === 'top') { showLoad(true); hideEmpty(); loadTop(); }
   else setView('all');
 }
 
@@ -1363,7 +1373,7 @@ let pendingNewArts = null;
 
 async function silentRefresh() {
   try {
-    const data = await apiGet({ action: 'top', limit: 10 });
+    const data = await fetchTop();
     const newArts = data.articles || [];
     if (!newArts.length) return;
     const currentIds = new Set(S.topArts.map(a => a.id));
