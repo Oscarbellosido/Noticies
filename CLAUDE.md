@@ -43,6 +43,20 @@ programada de l'app d'escriptori (~8:00 i ~19:00), i els scripts pugen el result
 - Esports: prioritza els d'Espanya i Europa (futbol masculí i femení, bàsquet, atletisme, ciclisme, tennis). Puntua baix (1-3)
   les lligues nord-americanes (NBA, NFL, MLB) i esports poc seguits a Europa (criquet, rugby australià).
 
+## Regles de català
+- Català correcte i natural, no calcs del castellà ni de l'anglès. Frases curtes.
+- Topònims en català: França, Alemanya, Brussel·les, Londres, Nova York, Pequín, Moscou, Kíiv, Rússia, Ucraïna,
+  Estats Units (EUA), Regne Unit, Unió Europea, Cisjordània, Iemen, Aràbia Saudita, Xina, Japó, Marroc, Etiòpia.
+- Noms de persones com els escriuen els mitjans catalans: Zelenski, Putin, Xi Jinping, Netanyahu, Pezeshkian.
+- Xifres a la catalana: 2,9%, 4.200 milions d'euros, 18 hores.
+- No inventis res que no digui el títol o la descripció, i no copiïs l'original sense traduir.
+- `publica.mjs` avisa ("Avisos: …") de noms no catalans, resums buits i valors fora de rang, i corregeix els camps
+  que pot (categoria fora de llista → Internacional, rellevància a enter 1-10, angle_position a [-1, 1] o null).
+
+## Ordres
+Només `node scripts/baixa.mjs` i `node scripts/publica.mjs`. Qualsevol altra ordre (date, ls, cat, node -e…) deixa la
+tasca programada encallada esperant un permís. `baixa.mjs` ja imprimeix la data i hora i quins fitxers cal escriure.
+
 ## Notes
 - El worker ja no processa res: `?action=fetch` retorna `disabled` i el botó "Actualitzar" només recarrega les dades.
   El cron del worker només fa la revisió mensual de fonts (dia 1, 5h UTC).

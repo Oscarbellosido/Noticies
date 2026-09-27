@@ -12,6 +12,10 @@ const MIN_RELEVANCE = 5;
 const MAX_ARTICLES  = 500;
 const CATEGORIES    = ['Política', 'Economia', 'Tecnologia', 'Internacional', 'Societat', 'Conflicte', 'Esports'];
 
+// Noms en castellà o anglès que no s'han d'usar en català (xarxa de seguretat: només avisa)
+const NO_CATALA = /\b(Francia|Alemania|Bruselas|Pek[ií]n|Kiev|Londr[ae]s|Nueva York|Mosc[uú]|Estados Unidos|Reino Unido|Uni[oó]n Europea|Cisjordania|Ucrania|Rusia)\b/;
+const esEnter1a10 = v => Number.isInteger(v) && v >= 1 && v <= 10;
+
 const DRY = process.argv.includes('--dry-run');
 const PENDENTS = join(ARREL, 'pendents');
 const llegeix = f => JSON.parse(readFileSync(join(PENDENTS, f), 'utf8'));
@@ -38,17 +42,32 @@ for (const p of processats) {
   if (!r) { avisos.push(`ID desconegut: ${p.id}`); continue; }
   if (vistos.has(p.id)) continue;
   vistos.add(p.id);
+
+  // Validació: es corregeix el que es pot i s'avisa de la resta
+  const titular = typeof p.titular_ca === 'string' ? p.titular_ca.trim() : '';
+  const resum   = typeof p.resum_ca   === 'string' ? p.resum_ca.trim()   : '';
+  if (!titular) avisos.push(`${p.id}: sense titular_ca → títol original`);
+  if (!resum)   avisos.push(`${p.id}: sense resum_ca → descripció original`);
+  if (r.lang !== 'ca' && titular && titular === r.title) avisos.push(`${p.id}: titular sense traduir`);
+  if (NO_CATALA.test(`${titular} ${resum}`)) avisos.push(`${p.id}: nom no català ("${`${titular} ${resum}`.match(NO_CATALA)[0]}")`);
   if (!CATEGORIES.includes(p.categoria)) avisos.push(`${p.id}: categoria "${p.categoria}" → Internacional`);
+  const rel = Number(p.rellevancia);
+  if (!esEnter1a10(rel)) avisos.push(`${p.id}: rellevancia "${p.rellevancia}" corregida`);
+  const dup = p.es_duplicat === true || p.es_duplicat === 'true';
+  const topic = String(p.topic_id || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const pos = p.angle_position === null || p.angle_position === '' || p.angle_position === undefined
+    ? null : Number(p.angle_position);
+  if (pos !== null && (isNaN(pos) || pos < -1 || pos > 1)) avisos.push(`${p.id}: angle_position "${p.angle_position}" corregit`);
   nous.push({ ...r,
-    title_ca:     p.titular_ca || r.title,
-    summary_ca:   p.resum_ca   || r.description || '',
+    title_ca:     titular || r.title,
+    summary_ca:   resum   || r.description || '',
     category:     CATEGORIES.includes(p.categoria) ? p.categoria : 'Internacional',
-    relevance:    Math.max(1, Math.min(10, Math.round(Number(p.rellevancia)) || 5)),
-    is_duplicate: !!p.es_duplicat,
-    topic_id:     p.topic_id        || '',
-    angle_editorial: p.angle_editorial || '',
-    angle_position: typeof p.angle_position === 'number' && !isNaN(p.angle_position)
-      ? Math.max(-1, Math.min(1, p.angle_position)) : null,
+    relevance:    Math.max(1, Math.min(10, Math.round(rel) || 5)),
+    is_duplicate: dup,
+    topic_id:     topic,
+    angle_editorial: typeof p.angle_editorial === 'string' ? p.angle_editorial.trim() : '',
+    angle_position: pos === null || isNaN(pos) ? null : Math.max(-1, Math.min(1, pos)),
     processed_at: ara,
   });
 }
@@ -73,7 +92,7 @@ const steps = [
   `Nous: ${raw.articles.length}`,
   `Processats: ${nous.length}, desats (rellevància ≥ ${MIN_RELEVANCE}, no duplicats): ${saved}`,
   ...(sense.length ? [`Sense resum (es tornaran a baixar): ${sense.length}`] : []),
-  ...avisos.slice(0, 20),
+  ...(avisos.length ? [`Avisos: ${avisos.length}`, ...avisos.slice(0, 20)] : []),
 ];
 console.log(steps.join('\n'));
 console.log(`KV: ${articles.length} → ${trimmed.length} articles`);
@@ -81,7 +100,10 @@ console.log(`KV: ${articles.length} → ${trimmed.length} articles`);
 let resum = null;
 if (existsSync(join(PENDENTS, 'resum_dia.json'))) {
   const r = llegeix('resum_dia.json');
-  if (r.text && r.text.trim()) resum = { data: ara.slice(0, 10), text: r.text.trim(), generat_at: ara };
+  const text = typeof r.text === 'string' ? r.text.trim() : '';
+  if (text.length >= 300) resum = { data: ara.slice(0, 10), text, generat_at: ara };
+  else console.log(`resum_dia.json ignorat: massa curt o és la plantilla (${text.length} caràcters)`);
+  if (resum && NO_CATALA.test(text)) console.log(`Avís resum del dia: nom no català ("${text.match(NO_CATALA)[0]}")`);
 }
 
 if (DRY) { console.log('--dry-run: no s\'ha pujat res.'); process.exit(0); }

@@ -57,3 +57,18 @@ console.log(`RSS: ${raw.length} articles de ${Object.keys(perFont).length}/27 fo
 const mudes = applyOverrides(overrides).map(s => s.name).filter(n => !perFont[n]);
 if (mudes.length) console.log(`Fonts sense articles: ${mudes.join(', ')}`);
 console.log(`Ja al KV: ${existents.length} · Nous a resumir: ${nous.length} → pendents/lot.json`);
+
+// Tot el que la tasca programada necessita saber, perquè no hagi d'executar cap altra ordre
+const ara = new Date();
+console.log(`Data i hora: ${ara.toLocaleString('ca-ES', { timeZone: 'Europe/Madrid', dateStyle: 'full', timeStyle: 'short' })}`);
+if (!nous.length) {
+  console.log('No hi ha articles nous: no escriguis cap resultat ni resum_dia.json. Pots executar node scripts/publica.mjs directament.');
+} else {
+  const TROS = 40;
+  console.log('Fitxers a escriure:');
+  for (let i = 0; i * TROS < nous.length; i++) {
+    const de = i * TROS, fins = Math.min(nous.length, de + TROS);
+    console.log(`  pendents/resultat-${String(i + 1).padStart(2, '0')}.json → articles ${de + 1}-${fins} de lot.json (${fins - de})`);
+  }
+  console.log('  pendents/resum_dia.json → { "text": "..." }');
+}
