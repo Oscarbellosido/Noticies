@@ -1553,9 +1553,10 @@ async function initMapa() {
   leafletMap = L.map('map', { zoomControl: true, scrollWheelZoom: false })
     .setView([30, 10], 2);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CartoDB',
-    subdomains: 'abcd', maxZoom: 10,
+  // Fons gris clar d'Esri: gratuït i sense clau (CartoDB ara retorna 'API KEY REQUIRED')
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap',
+    maxZoom: 10,
   }).addTo(leafletMap);
 
   await renderMapa();
