@@ -13,7 +13,7 @@ const MAX_ARTICLES  = 500;
 const CATEGORIES    = ['Política', 'Economia', 'Tecnologia', 'Internacional', 'Societat', 'Conflicte', 'Esports'];
 
 // Noms en castellà o anglès que no s'han d'usar en català (xarxa de seguretat: només avisa)
-const NO_CATALA = /\b(Francia|Alemania|Bruselas|Pek[ií]n|Kiev|Londr[ae]s|Nueva York|Mosc[uú]|Estados Unidos|Reino Unido|Uni[oó]n Europea|Cisjordania|Ucrania|Rusia)\b/;
+const NO_CATALA = /\b(Francia|Alemania|Bruselas|Pek[ií]n|Kiev|Nueva York|Mosc[uú]|Estados Unidos|Reino Unido|Uni[oó]n Europea|Cisjordania|Ucrania|Rusia)\b/;
 const esEnter1a10 = v => Number.isInteger(v) && v >= 1 && v <= 10;
 
 const DRY = process.argv.includes('--dry-run');
