@@ -7,12 +7,28 @@ import { fileURLToPath } from 'node:url';
 export const ARREL = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const WORKER_URL = 'https://noticies.oscarbellosido.workers.dev/';
 
-function wrangler(args) {
-  // Els arguments són claus i rutes controlades per nosaltres (sense cometes dins).
-  return execSync(['npx wrangler', ...args, '--binding ARTICLES --remote'].join(' '), {
+function wranglerUnCop(cmd) {
+  return execSync(cmd, {
     cwd: ARREL, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+function wrangler(args) {
+  // Els arguments són claus i rutes controlades per nosaltres (sense cometes dins).
+  const cmd = ['npx wrangler', ...args, '--binding ARTICLES --remote'].join(' ');
+  try {
+    return wranglerUnCop(cmd);
+  } catch (e) {
+    // El token OAuth de wrangler caduca; 'whoami' el renova amb el refresh token. Un sol reintent.
+    console.log(`wrangler ha fallat (${String(e.stderr || e.message).split('\n').find(l => l.trim()) || 'error'}); renovo la sessió i ho torno a provar…`);
+    try { wranglerUnCop('npx wrangler whoami'); } catch { /* si no hi ha sessió, el reintent fallarà amb el missatge real */ }
+    try {
+      return wranglerUnCop(cmd);
+    } catch (e2) {
+      throw new Error(`wrangler continua fallant. Cal obrir una consola a la carpeta Noticies i executar: npx wrangler login\n${e2.stderr || e2.message}`);
+    }
+  }
 }
 
 export function kvGetJson(key, porDefecte = null) {
