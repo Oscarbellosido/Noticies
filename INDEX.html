@@ -354,7 +354,7 @@
       <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">👋 Benvingut a Noticies</h2>
       <p class="text-gray-600 dark:text-gray-400 text-[15px] leading-relaxed mb-5">
         Agregador de notícies internacionals en <strong class="text-gray-800 dark:text-gray-200">català</strong> potenciades per IA.
-        El contingut s'actualitza <strong class="text-gray-800 dark:text-gray-200">2 cops al dia</strong> amb articles resumits i traduïts automàticament de 27 fonts internacionals.
+        El contingut s'actualitza <strong class="text-gray-800 dark:text-gray-200">3 cops al dia</strong> amb articles resumits i traduïts automàticament de 27 fonts internacionals.
       </p>
 
       <div class="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-5">
@@ -404,7 +404,7 @@
           <ul class="space-y-1.5 list-none">
             <li class="flex items-start gap-2"><span>🌐</span><span>Recull notícies de <strong class="text-gray-900 dark:text-gray-100">27 fonts</strong> d'arreu del món: BBC, The Guardian, NYT, Le Monde, DW, El País, La Vanguardia, ARA, VilaWeb, Al Jazeera, SCMP, Xataka, Marca…</span></li>
             <li class="flex items-start gap-2"><span>🤖</span><span>Claude llegeix cada article i en fa el <strong class="text-gray-900 dark:text-gray-100">titular i un resum breu en català</strong>, li posa una categoria, una <strong class="text-gray-900 dark:text-gray-100">rellevància</strong> de 1 a 10 i el tema, i detecta els duplicats</span></li>
-            <li class="flex items-start gap-2"><span>🕐</span><span>S'actualitza sola <strong class="text-gray-900 dark:text-gray-100">2 cops al dia</strong>, cap a les 6h i les 16h. A dalt de la llista hi diu quan va ser l'última</span></li>
+            <li class="flex items-start gap-2"><span>🕐</span><span>S'actualitza sola <strong class="text-gray-900 dark:text-gray-100">3 cops al dia</strong>, cap a les 6h, les 13h i les 20h. A dalt de la llista hi diu quan va ser l'última</span></li>
             <li class="flex items-start gap-2"><span>🔄</span><span>El botó <strong class="text-gray-900 dark:text-gray-100">Actualitzar</strong> torna a carregar les dades més recents; no genera notícies noves</span></li>
           </ul>
         </div>
@@ -870,15 +870,15 @@ function renderPerspectives(groups) {
   }).join('');
 }
 
-// S'actualitza dos cops al dia (6h i 16h): si fa més de 18 h, ha fallat almenys una execució.
-const STALE_HOURS = 18;
+// S'actualitza tres cops al dia (6h, 13h i 20h): si fa més de 12 h, ha fallat almenys una execució.
+const STALE_HOURS = 12;
 function updateStaleBanner(iso) {
   const el = document.getElementById('banner-stale');
   const hores = iso ? (Date.now() - new Date(iso).getTime()) / 3600000 : Infinity;
   if (hores <= STALE_HOURS) { el.classList.add('hidden'); el.classList.remove('flex'); return; }
   const fa = !isFinite(hores) ? 'fa temps' : hores < 48 ? `fa ${Math.floor(hores)} hores` : `fa ${Math.floor(hores / 24)} dies`;
   document.getElementById('banner-stale-msg').textContent =
-    `Les notícies no s'actualitzen des de ${fa}: potser el PC o l'app de Claude estaven tancats a l'hora de l'actualització (6h i 16h).`;
+    `Les notícies no s'actualitzen des de ${fa}: potser el PC o l'app de Claude estaven tancats a l'hora de l'actualització (6h, 13h i 20h).`;
   el.classList.remove('hidden'); el.classList.add('flex');
 }
 

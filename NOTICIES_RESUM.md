@@ -14,7 +14,7 @@ El frontend llegeix les dades d'un Cloudflare Worker, de manera que l'app carreg
 ## Arquitectura
 
 ```
-PC (tasca programada "noticies-en-catala", 6:00 i 16:00)
+PC (tasca programada "noticies-en-catala", 6:00, 13:00 i 20:00)
   node scripts/baixa.mjs   → [Fonts RSS] → pendents/lot.json (només articles nous)
   Claude escriu            → pendents/resultat-NN.json + resum_dia.json
   node scripts/publica.mjs → wrangler kv key put → [KV ARTICLES] → POST ?action=notify (push)

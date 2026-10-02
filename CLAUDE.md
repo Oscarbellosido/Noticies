@@ -4,7 +4,7 @@ App de notícies internacionals en català. Frontend `INDEX.html`: **https://osc
 + Cloudflare Worker `worker.js` amb KV `ARTICLES`. Detalls tècnics a `NOTICIES_RESUM.md`.
 
 Des de setembre de 2026 **no es fa servir l'API d'Anthropic** (0 €): els resums els escriu Claude en una tasca
-programada de l'app d'escriptori (~6:00 i ~16:00), i els scripts pugen el resultat al KV amb wrangler.
+programada de l'app d'escriptori (~6:00, ~13:00 i ~20:00), i els scripts pugen el resultat al KV amb wrangler.
 
 ## Procediment (el que fa la tasca programada)
 1. `node scripts/baixa.mjs` — baixa les 27 fonts RSS (`rss.mjs`), descarta els IDs que ja són al KV i els de fa més de 3 dies,
