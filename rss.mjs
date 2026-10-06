@@ -55,7 +55,11 @@ export async function fetchRssSource(source) {
 
     for (const m of items.slice(0, MAX_PER_SOURCE)) {
       const block = m[1] || m[2];
-      const url   = (block.match(/<link[^>]*>([^<]+)<\/link>/) || block.match(/href="([^"]+)"/))?.[1]?.trim() || '';
+      // L'enllaç pot venir en CDATA (ARA) o com a atribut href (Atom). L'últim recurs
+      // (qualsevol href) pot agafar un enllaç de dins la descripció: només si no n'hi ha cap altre.
+      const url   = (block.match(/<link[^>]*>\s*(?:<!\[CDATA\[)?\s*([^<\]\s][^<\]]*?)\s*(?:\]\]>)?\s*<\/link>/)
+                  || block.match(/<link[^>]+href="([^"]+)"/)
+                  || block.match(/href="([^"]+)"/))?.[1]?.trim() || '';
       const title = cleanText((block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/)?.[1]||''));
       const rawDescBlock = block.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/)?.[1]
                         || block.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] || '';
@@ -73,7 +77,8 @@ export async function fetchRssSource(source) {
 
       const dateStr = (block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/)?.[1]
                     || block.match(/<published[^>]*>([\s\S]*?)<\/published>/)?.[1] || '').trim();
-      const ts   = dateStr ? new Date(dateStr).getTime() : Date.now();
+      const dataNeta = dateStr.replace(/^<!\[CDATA\[|\]\]>$/g, '').trim(); // ARA posa la data en CDATA
+      const ts   = dataNeta ? new Date(dataNeta).getTime() : Date.now();
       const pubAt = new Date(ts||Date.now()).toISOString();
 
       arts.push({ id:makeId(url), title, description:desc, url, source:source.name, country:source.country,
