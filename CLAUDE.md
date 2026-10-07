@@ -57,6 +57,13 @@ programada de l'app d'escriptori (~6:00, ~13:00 i ~20:00), i els scripts pugen e
 Només `node scripts/baixa.mjs` i `node scripts/publica.mjs`. Qualsevol altra ordre (date, ls, cat, node -e…) deixa la
 tasca programada encallada esperant un permís. `baixa.mjs` ja imprimeix la data i hora i quins fitxers cal escriure.
 
+## Tasca vigilant
+La tasca programada `noticies-vigilant` s'executa a les 6:50, 13:50 i 20:50. Fa `node scripts/comprova.mjs`:
+"AL DIA" o "EN CURS" → no fa res; "CAL ACTUALITZAR" → fa el procediment sencer (per si l'actualització principal ha
+fallat: servidors de Claude saturats, PC tancat, sessió encallada…).
+El hook `scripts/hook-tasca.mjs` (registrat a `.claude/settings.local.json`) denega a l'instant qualsevol ordre de shell
+que no sigui comprova/baixa/publica a les sessions d'aquestes dues tasques, perquè no s'encallin esperant permís.
+
 ## Notes
 - El worker ja no processa res: `?action=fetch` retorna `disabled` i el botó "Actualitzar" només recarrega les dades.
   El cron del worker només fa la revisió mensual de fonts (dia 1, 5h UTC).
