@@ -1,11 +1,12 @@
-// Hook PreToolUse (Bash/PowerShell) per a la tasca programada "noticies-en-catala".
+// Hook PreToolUse (Bash/PowerShell) per a les tasques programades "noticies-en-catala" i "noticies-vigilant".
 // La tasca s'executa sense ningú davant: si intenta una ordre sense permís, es
 // queda encallada hores esperant que algú l'aprovi. Aquest hook la denega a
 // l'instant (la tasca rep l'error i continua). Només s'aplica a les sessions
 // iniciades per la tasca; les converses normals no es veuen afectades.
 import { openSync, readSync, closeSync } from 'node:fs';
 
-const PERMESES = /^node scripts[\\/](baixa|publica)\.mjs( --dry-run)?\s*$/;
+const PERMESES = /^node scripts[\\/]((baixa|comprova)\.mjs|publica\.mjs( --dry-run)?)\s*$/;
+const TASQUES = ['noticies-en-catala', 'noticies-vigilant'];
 
 let entrada = '';
 for await (const tros of process.stdin) entrada += tros;
@@ -24,7 +25,7 @@ function esTascaNoticies(transcript) {
       if (e.type !== 'user') continue;
       const c = e.message?.content;
       const text = typeof c === 'string' ? c : Array.isArray(c) ? (c.find(b => b.type === 'text')?.text || '') : '';
-      return text.trimStart().startsWith('<scheduled-task name="noticies-en-catala"');
+      return TASQUES.some(t => text.trimStart().startsWith(`<scheduled-task name="${t}"`));
     }
   } catch { /* sense transcripció llegible: no hi intervenim */ }
   return false;
@@ -40,7 +41,7 @@ process.stdout.write(JSON.stringify({
     hookEventName: 'PreToolUse',
     permissionDecision: 'deny',
     permissionDecisionReason:
-      `A la tasca programada només es pot executar "node scripts/baixa.mjs", "node scripts/publica.mjs --dry-run" i ` +
+      `A la tasca programada només es pot executar "node scripts/comprova.mjs", "node scripts/baixa.mjs", "node scripts/publica.mjs --dry-run" i ` +
       `"node scripts/publica.mjs", exactament així. Per comprovar els fitxers resultat-NN.json fes servir ` +
       `"node scripts/publica.mjs --dry-run". Per llegir fitxers fes servir l'eina Read. Continua amb el procediment.`,
   },
